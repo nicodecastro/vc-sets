@@ -361,7 +361,7 @@ void main() {
     ]);
   });
 
-  testWidgets('reconciliation decisions show each device full rally', (
+  testWidgets('reconciliation decisions show score choices and raw actions', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(430, 1000));
@@ -475,8 +475,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('1-0 • V1  B2+'), findsOneWidget);
-    expect(find.text('0-1 • A7-'), findsOneWidget);
+    expect(find.text('Score 1-0'), findsOneWidget);
+    expect(find.text('Score 0-1'), findsOneWidget);
+    expect(find.text('Device A'), findsNothing);
+    expect(find.text('Device B'), findsNothing);
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(ValueKey('conflict-actions-1:1-${homeTeam.id}')),
+          )
+          .initialValue,
+      'V1\nB2+',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(ValueKey('conflict-actions-1:1-${awayTeam.id}')),
+          )
+          .initialValue,
+      'A7-',
+    );
     expect(find.textContaining('winner '), findsNothing);
     expect(find.text('The reconciled match is incomplete'), findsOneWidget);
     expect(
@@ -505,8 +523,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Override set 1, rally 1'), findsOneWidget);
     expect(find.text('Rally actions'), findsOneWidget);
-    expect(find.text('Team 1 • HOM'), findsOneWidget);
-    expect(find.text('Team 2 • AWY'), findsOneWidget);
+    expect(find.text('Team 1 • HOM'), findsWidgets);
+    expect(find.text('Team 2 • AWY'), findsWidgets);
     expect(find.text('serve'), findsNothing);
     await tester.enterText(
       find.byKey(ValueKey('raw-actions-${homeTeam.id}')),
@@ -596,8 +614,9 @@ void main() {
     );
     final tournament = testTournament(games: [game]);
     final data = AppData(deviceId: 'device-a', tournaments: [tournament]);
+    final repository = MemoryAppRepository(data);
     final overrides = [
-      appRepositoryProvider.overrideWithValue(MemoryAppRepository(data)),
+      appRepositoryProvider.overrideWithValue(repository),
       initialAppDataProvider.overrideWithValue(data),
     ];
     await tester.binding.setSurfaceSize(const Size(1000, 900));
@@ -624,10 +643,22 @@ void main() {
 
     expect(find.text('Reconciliation summary'), findsOneWidget);
     expect(find.text('HOM 0–1 AWY'), findsOneWidget);
-    expect(find.text('Official: Device B'), findsOneWidget);
-    expect(find.text('Device A: 1-0 • No actions recorded'), findsOneWidget);
-    expect(find.text('Device B: 0-1 • No actions recorded'), findsOneWidget);
+    expect(find.text('Official: 0-1'), findsOneWidget);
+    expect(find.text('Option 1: 1-0'), findsOneWidget);
+    expect(find.text('Option 2: 0-1'), findsOneWidget);
     expect(find.text('Finalize official match'), findsNothing);
+    expect(find.text('Undo reconciliation'), findsOneWidget);
+
+    await tester.tap(find.text('Undo reconciliation'));
+    await tester.pumpAndSettle();
+    expect(find.text('Undo reconciliation?'), findsOneWidget);
+    await tester.tap(find.text('Undo reconciliation').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Finalize official match'), findsOneWidget);
+    final reopened = (await repository.load()).tournaments.single.games.single;
+    expect(reopened.status, GameStatus.awaitingReconciliation);
+    expect(reopened.officialLog, isNull);
+    expect(reopened.revisions, hasLength(1));
 
     await tester.pumpWidget(
       ProviderScope(
@@ -641,8 +672,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Reconciliation summary'), findsOneWidget);
-    expect(find.byTooltip('Reconcile'), findsNothing);
+    expect(find.byTooltip('Reconciliation summary'), findsNothing);
+    expect(find.byTooltip('Reconcile'), findsOneWidget);
   });
 
   testWidgets('reports render the ordered player stats summary matrix', (

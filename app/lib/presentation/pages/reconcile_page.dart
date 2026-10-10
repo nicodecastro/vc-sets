@@ -10,13 +10,15 @@ import '../../domain/reconciliation.dart';
 import '../../domain/scoring.dart';
 import '../widgets/common.dart';
 
-String _rallySummary(Rally? rally, Tournament tournament) {
-  if (rally == null) return 'Missing rally';
-  final actions = rally.actions
-      .map((action) => action.notation(tournament.team(action.teamId)))
-      .join('  ');
-  return '${rally.homeScore}-${rally.awayScore} • ${actions.isEmpty ? 'No actions recorded' : actions}';
-}
+String _scoreLabel(Rally? rally) =>
+    rally == null ? 'Missing rally' : '${rally.homeScore}-${rally.awayScore}';
+
+List<TeamAction> _combinedActions(ReconciliationConflict conflict) => {
+  for (final action in conflict.primary?.actions ?? const <TeamAction>[])
+    action.id: action,
+  for (final action in conflict.imported?.actions ?? const <TeamAction>[])
+    action.id: action,
+}.values.toList();
 
 class ReconcilePage extends ConsumerStatefulWidget {
   const ReconcilePage({
@@ -52,6 +54,7 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
         tournament: tournament,
         game: game,
         comparison: comparison,
+        onUndo: saving ? null : _undoReconciliation,
       );
     }
     if (game.logs.length < 2) {
@@ -161,9 +164,8 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
                               Expanded(
                                 child: RadioListTile<bool>(
                                   value: false,
-                                  title: const Text('Device A'),
-                                  subtitle: Text(
-                                    _rallySummary(conflict.primary, tournament),
+                                  title: Text(
+                                    'Score ${_scoreLabel(conflict.primary)}',
                                   ),
                                   contentPadding: EdgeInsets.zero,
                                 ),
@@ -171,18 +173,21 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
                               Expanded(
                                 child: RadioListTile<bool>(
                                   value: true,
-                                  title: const Text('Device B'),
-                                  subtitle: Text(
-                                    _rallySummary(
-                                      conflict.imported,
-                                      tournament,
-                                    ),
+                                  title: Text(
+                                    'Score ${_scoreLabel(conflict.imported)}',
                                   ),
                                   contentPadding: EdgeInsets.zero,
                                 ),
                               ),
                             ],
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        _RawActionLists(
+                          idPrefix: conflict.key,
+                          home: home,
+                          away: away,
+                          actions: _combinedActions(conflict),
                         ),
                       ],
                     ),
@@ -337,6 +342,48 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
         ),
       ),
     );
+  }
+
+  Future<void> _undoReconciliation() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Undo reconciliation?'),
+        content: const Text(
+          'This reopens the game and removes its official result from reports and standings until it is reconciled again. The previous revision remains in the audit history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Undo reconciliation'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => saving = true);
+    try {
+      await ref
+          .read(appControllerProvider.notifier)
+          .reopenGame(
+            widget.tournamentId,
+            widget.gameId,
+            'Reconciliation undone from summary',
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Reconciliation undone.')));
+      }
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
   }
 
   Future<void> _editRally(Tournament tournament, Game game, Rally rally) async {
@@ -740,16 +787,66 @@ class _RawActionColumn extends StatelessWidget {
   );
 }
 
+class _RawActionLists extends StatelessWidget {
+  const _RawActionLists({
+    required this.idPrefix,
+    required this.home,
+    required this.away,
+    required this.actions,
+  });
+
+  final String idPrefix;
+  final TournamentTeam home;
+  final TournamentTeam away;
+  final List<TeamAction> actions;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(child: _box(home, 'Team 1 • ${home.shortCode}')),
+      const SizedBox(width: 12),
+      Expanded(child: _box(away, 'Team 2 • ${away.shortCode}')),
+    ],
+  );
+
+  Widget _box(TournamentTeam team, String label) {
+    final raw = actions
+        .where((action) => action.teamId == team.id)
+        .map((action) => action.notation(team))
+        .join('\n');
+    return SizedBox(
+      height: 140,
+      child: TextFormField(
+        key: ValueKey('conflict-actions-$idPrefix-${team.id}'),
+        initialValue: raw,
+        readOnly: true,
+        expands: true,
+        minLines: null,
+        maxLines: null,
+        textAlignVertical: TextAlignVertical.top,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: 'No actions',
+          alignLabelWithHint: true,
+        ),
+      ),
+    );
+  }
+}
+
 class _FinalizedReconciliationSummary extends StatelessWidget {
   const _FinalizedReconciliationSummary({
     required this.tournament,
     required this.game,
     required this.comparison,
+    required this.onUndo,
   });
 
   final Tournament tournament;
   final Game game;
   final ReconciliationResult? comparison;
+  final VoidCallback? onUndo;
 
   @override
   Widget build(BuildContext context) {
@@ -874,6 +971,12 @@ class _FinalizedReconciliationSummary extends StatelessWidget {
                       if (game.revisions.length > 1)
                         Text('Revision ${game.revisions.length}'),
                     ],
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: onUndo,
+                      icon: const Icon(Icons.undo),
+                      label: const Text('Undo reconciliation'),
+                    ),
                   ],
                 ),
               ),
@@ -908,7 +1011,8 @@ class _FinalizedReconciliationSummary extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _ReconciledDecisionCard(
-                    tournament: tournament,
+                    home: home,
+                    away: away,
                     conflict: conflict,
                     officialRally: officialByKey[conflict.key],
                   ),
@@ -923,22 +1027,22 @@ class _FinalizedReconciliationSummary extends StatelessWidget {
 
 class _ReconciledDecisionCard extends StatelessWidget {
   const _ReconciledDecisionCard({
-    required this.tournament,
+    required this.home,
+    required this.away,
     required this.conflict,
     required this.officialRally,
   });
 
-  final Tournament tournament;
+  final TournamentTeam home;
+  final TournamentTeam away;
   final ReconciliationConflict conflict;
   final Rally? officialRally;
 
   @override
   Widget build(BuildContext context) {
-    final selectedDevice = officialRally?.overrideReason != null
+    final officialChoice = officialRally?.overrideReason != null
         ? 'Manual override'
-        : officialRally?.id == conflict.imported?.id
-        ? 'Device B'
-        : 'Device A';
+        : _scoreLabel(officialRally);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -950,13 +1054,20 @@ class _ReconciledDecisionCard extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Text('Device A: ${_rallySummary(conflict.primary, tournament)}'),
+            Text('Option 1: ${_scoreLabel(conflict.primary)}'),
             const SizedBox(height: 4),
-            Text('Device B: ${_rallySummary(conflict.imported, tournament)}'),
+            Text('Option 2: ${_scoreLabel(conflict.imported)}'),
+            const SizedBox(height: 10),
+            _RawActionLists(
+              idPrefix: 'summary-${conflict.key}',
+              home: home,
+              away: away,
+              actions: officialRally?.actions ?? const [],
+            ),
             const SizedBox(height: 10),
             Chip(
               avatar: const Icon(Icons.check, size: 18),
-              label: Text('Official: $selectedDevice'),
+              label: Text('Official: $officialChoice'),
             ),
             if (officialRally?.overrideReason != null)
               Text('Override reason: ${officialRally!.overrideReason}'),
