@@ -175,6 +175,8 @@ void main() {
       find.ancestor(of: find.text('HOM'), matching: find.byType(InkWell)),
       findsNothing,
     );
+    expect(find.text('V1'), findsOneWidget);
+    expect(find.text('Selected: #1 Home 1'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     await tester.pumpAndSettle();
@@ -198,10 +200,6 @@ void main() {
     expect(playerActions.dy, lessThan(160));
     expect(tester.getSize(desktopAttButton).height, lessThanOrEqualTo(34));
 
-    await tester.tap(find.text('ATT').first);
-    await tester.pump();
-    expect(find.text('V1'), findsOneWidget);
-
     await tester.tap(find.text('EXC').first);
     await tester.pump();
     expect(find.text('V1'), findsNothing);
@@ -220,9 +218,14 @@ void main() {
       isNotNull,
     );
 
+    await tester.tap(find.text('Enter'));
+    await tester.pumpAndSettle();
+    expect(find.text('HOM point  •  1-0'), findsOneWidget);
+    expect(find.text('V1'), findsOneWidget);
+
     await tester.tap(find.text('EXC').first);
     await tester.pump();
-    expect(find.text('V1+'), findsNWidgets(2));
+    expect(find.text('V1+'), findsOneWidget);
 
     await tester.ensureVisible(find.text('OPP ERR  •  OP+'));
     await tester.pumpAndSettle();
@@ -231,7 +234,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('TEAM FAULT  •  T-'));
     await tester.pump();
-    expect(find.text('V1+'), findsNWidgets(2));
+    expect(find.text('V1+'), findsOneWidget);
     expect(find.text('OP+'), findsOneWidget);
     expect(find.text('T-'), findsOneWidget);
 
@@ -259,8 +262,17 @@ void main() {
 
     await tester.tap(find.text('Enter'));
     await tester.pumpAndSettle();
-    expect(find.text('AWY point  •  0-1'), findsOneWidget);
+    expect(find.text('AWY point  •  1-1'), findsOneWidget);
     expect(find.text('T-'), findsNothing);
+    expect(find.text('This rally'), findsNothing);
+
+    await tester.tap(find.text('OPP ERR  •  OP+'));
+    await tester.pump();
+    await tester.tap(find.text('Enter'));
+    await tester.pumpAndSettle();
+    expect(find.text('HOM point  •  2-1'), findsOneWidget);
+    expect(find.text('V2'), findsOneWidget);
+    expect(find.text('Selected: #2 Home 2'), findsOneWidget);
   });
 
   testWidgets('R-5 lineup opens a player dropdown from each court position', (

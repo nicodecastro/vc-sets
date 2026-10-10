@@ -28,6 +28,8 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
   final pending = <TeamAction>[];
   String? selectedPlayerId;
   String? selectedLiberoId;
+  String? _automaticServeKey;
+  String? _automaticServeActionId;
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +74,54 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
       score.setNumber,
       assignedRotation,
     );
+    final servingPlayerId =
+        !score.isComplete &&
+            score.servingTeamId == assigned.id &&
+            courtPlayerIds.isNotEmpty
+        ? courtPlayerIds.first
+        : null;
+    final automaticServeKey =
+        '${log.id}:${score.setNumber}:${log.rallies.length}:${score.servingTeamId}:$servingPlayerId';
+    if (_automaticServeKey != automaticServeKey) {
+      if (servingPlayerId == null) {
+        _automaticServeKey = automaticServeKey;
+      } else {
+        final canReplace =
+            pending.isEmpty ||
+            (pending.length == 1 &&
+                pending.single.id == _automaticServeActionId &&
+                pending.single.skill == Skill.serve &&
+                pending.single.grade == ActionGrade.attempt);
+        if (canReplace) {
+          _automaticServeKey = automaticServeKey;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _automaticServeKey != automaticServeKey) return;
+            final stillReplaceable =
+                pending.isEmpty ||
+                (pending.length == 1 &&
+                    pending.single.id == _automaticServeActionId &&
+                    pending.single.skill == Skill.serve &&
+                    pending.single.grade == ActionGrade.attempt);
+            if (!stillReplaceable) return;
+            final action = TeamAction(
+              id: const Uuid().v4(),
+              teamId: assigned.id,
+              playerId: servingPlayerId,
+              skill: Skill.serve,
+              grade: ActionGrade.attempt,
+              recordedAt: DateTime.now(),
+            );
+            setState(() {
+              selectedPlayerId = servingPlayerId;
+              _automaticServeActionId = action.id;
+              pending
+                ..clear()
+                ..add(action);
+            });
+          });
+        }
+      }
+    }
     if (!courtPlayerIds.contains(selectedPlayerId)) {
       selectedPlayerId = courtPlayerIds.firstOrNull;
     }
@@ -472,7 +522,12 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
             winnerTeamId: teamId,
             actions: [...pending],
           );
-      if (mounted) setState(pending.clear);
+      if (mounted) {
+        setState(() {
+          _automaticServeActionId = null;
+          pending.clear();
+        });
+      }
     } catch (error) {
       if (mounted) showError(context, error);
     }
