@@ -56,6 +56,18 @@ void main() {
     expect(restored.importedPackageIds, ['one']);
   });
 
+  test('legacy UT player positions restore as U', () {
+    final player = Player.fromJson(const {
+      'id': 'utility',
+      'number': 8,
+      'name': 'Utility Player',
+      'position': 'UT',
+    });
+
+    expect(player.position, PlayerPosition.U);
+    expect(player.toJson()['position'], 'U');
+  });
+
   test('backup byte import accepts a UTF-8 byte-order mark', () {
     final source = service.createBackup(
       packageId: 'bom-backup',

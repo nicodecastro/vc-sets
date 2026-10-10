@@ -12,7 +12,7 @@ enum BracketGameType { standard, finalMatch, thirdPlace }
 
 enum SubstitutionKind { regular, liberoReplacement }
 
-enum PlayerPosition { S, OH, OPP, MB, L, DS, UT }
+enum PlayerPosition { S, OH, OPP, MB, L, DS, U }
 
 enum Skill {
   serve,
@@ -69,8 +69,8 @@ class Player {
     name: json['name']! as String,
     position: enumByName(
       PlayerPosition.values,
-      json['position'],
-      PlayerPosition.UT,
+      json['position'] == 'UT' ? 'U' : json['position'],
+      PlayerPosition.U,
     ),
     isCaptain: json['isCaptain'] as bool? ?? false,
   );

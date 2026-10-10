@@ -1763,7 +1763,7 @@ class _RosterDraft {
     id: const Uuid().v4(),
     number: TextEditingController(),
     name: TextEditingController(),
-    position: PlayerPosition.UT,
+    position: PlayerPosition.U,
     isCaptain: false,
   );
 

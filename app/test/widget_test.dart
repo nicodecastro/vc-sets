@@ -169,7 +169,7 @@ void main() {
     expect(enterCenter.dy, teamFaultCenter.dy);
     expect(enterCenter.dx, greaterThan(teamFaultCenter.dx));
     expect(find.text('Home 4'), findsOneWidget);
-    expect(find.text('UT • IV'), findsOneWidget);
+    expect(find.text('U • IV'), findsOneWidget);
     expect(find.text('Tap a team panel to award the next rally'), findsNothing);
     expect(
       find.ancestor(of: find.text('HOM'), matching: find.byType(InkWell)),

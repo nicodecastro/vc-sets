@@ -11,7 +11,7 @@ final homeTeam = TournamentTeam(
       id: 'home-$index',
       number: index + 1,
       name: 'Home ${index + 1}',
-      position: index == 5 ? PlayerPosition.L : PlayerPosition.UT,
+      position: index == 5 ? PlayerPosition.L : PlayerPosition.U,
     ),
   ),
 );
@@ -27,7 +27,7 @@ final awayTeam = TournamentTeam(
       id: 'away-$index',
       number: index + 7,
       name: 'Away ${index + 1}',
-      position: PlayerPosition.UT,
+      position: PlayerPosition.U,
     ),
   ),
 );
