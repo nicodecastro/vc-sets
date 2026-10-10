@@ -96,6 +96,11 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
               !substitution.isLiberoReplacement,
         )
         .length;
+    final inferredWinner = const ScoringEngine().inferRallyWinner(
+      game,
+      assigned.id,
+      pending,
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text('${home.shortCode} vs ${away.shortCode}'),
@@ -124,8 +129,6 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
               away: away,
               score: score,
               disabled: score.isComplete,
-              onHome: () => _award(home.id),
-              onAway: () => _award(away.id),
             );
             final entryPanel = _EntryPanel(
               team: assigned,
@@ -161,6 +164,9 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
                       courtPlayerIds.length != 6
                   ? null
                   : _recordLiberoSwap,
+              onEnter: score.isComplete || inferredWinner == null
+                  ? null
+                  : () => _award(inferredWinner),
               compact: compact,
               denseSkillButtons: denseDesktopSkills,
             );
@@ -631,15 +637,11 @@ class _ScorePanel extends StatelessWidget {
     required this.away,
     required this.score,
     required this.disabled,
-    required this.onHome,
-    required this.onAway,
   });
   final TournamentTeam home;
   final TournamentTeam away;
   final MatchScore score;
   final bool disabled;
-  final VoidCallback onHome;
-  final VoidCallback onAway;
   @override
   Widget build(BuildContext context) => Card(
     child: Padding(
@@ -672,7 +674,6 @@ class _ScorePanel extends StatelessWidget {
                   points: score.homePoints,
                   rotation: score.homeRotation,
                   serving: score.servingTeamId == home.id,
-                  onTap: disabled ? null : onHome,
                 ),
               ),
               Padding(
@@ -688,15 +689,9 @@ class _ScorePanel extends StatelessWidget {
                   points: score.awayPoints,
                   rotation: score.awayRotation,
                   serving: score.servingTeamId == away.id,
-                  onTap: disabled ? null : onAway,
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Tap a team panel to award the next rally',
-            style: TextStyle(color: Colors.black54, fontSize: 12),
           ),
         ],
       ),
@@ -710,49 +705,43 @@ class _TeamScore extends StatelessWidget {
     required this.points,
     required this.rotation,
     required this.serving,
-    required this.onTap,
   });
   final TournamentTeam team;
   final int points;
   final int rotation;
   final bool serving;
-  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => Material(
     color: Color(team.colorValue).withValues(alpha: .12),
     borderRadius: BorderRadius.circular(18),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (serving) const Icon(Icons.sports_volleyball, size: 18),
-                if (serving) const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    team.shortCode,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (serving) const Icon(Icons.sports_volleyball, size: 18),
+              if (serving) const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  team.shortCode,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-              ],
-            ),
-            Text(
-              '$points',
-              style: Theme.of(context).textTheme.displaySmall
-                  ?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            Text(
-              'Rotation $rotation',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+          Text(
+            '$points',
+            style: Theme.of(context).textTheme.displaySmall
+                ?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          Text(
+            'Rotation $rotation',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
     ),
   );
@@ -779,6 +768,7 @@ class _EntryPanel extends StatelessWidget {
     required this.onSubstitution,
     required this.onTimeout,
     required this.onLiberoSwap,
+    required this.onEnter,
     required this.compact,
     required this.denseSkillButtons,
   });
@@ -801,6 +791,7 @@ class _EntryPanel extends StatelessWidget {
   final VoidCallback? onSubstitution;
   final VoidCallback? onTimeout;
   final VoidCallback? onLiberoSwap;
+  final VoidCallback? onEnter;
   final bool compact;
   final bool denseSkillButtons;
   @override
@@ -847,79 +838,115 @@ class _EntryPanel extends StatelessWidget {
               compact: compact,
             ),
             SizedBox(height: compact ? 6 : 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: onEditLineup,
-                  style: outlinedStyle,
-                  icon: Icon(
-                    Icons.format_list_numbered,
-                    size: compact ? 17 : 24,
-                  ),
-                  label: Text(
-                    compact
-                        ? 'R-5 • Set $setNumber'
-                        : 'R-5 lineup • Set $setNumber',
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: onSubstitution,
-                  style: outlinedStyle,
-                  icon: Icon(Icons.swap_horiz, size: compact ? 17 : 24),
-                  label: Text(
-                    compact
-                        ? 'Sub ($substitutionsUsed)'
-                        : 'Substitution ($substitutionsUsed)',
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: onTimeout,
-                  style: outlinedStyle,
-                  icon: Icon(Icons.timer_outlined, size: compact ? 17 : 24),
-                  label: Text('Timeout ($timeoutsUsed/2)'),
-                ),
-                Chip(
-                  visualDensity: compact ? VisualDensity.compact : null,
-                  label: Text('Rotation $rotation'),
-                ),
-                SizedBox(
-                  width: compact ? 140 : 170,
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('libero-$selectedLiberoId'),
-                    initialValue: selectedLiberoId,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Libero',
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: compact ? 8 : 12,
-                        vertical: compact ? 6 : 10,
-                      ),
-                    ),
-                    hint: const Text('No libero'),
-                    items: liberos
-                        .map(
-                          (player) => DropdownMenuItem(
-                            value: player.id,
-                            child: Text(
-                              '#${player.number} ${player.name}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final tight = constraints.maxWidth < 720;
+                Widget firstRowButton({
+                  required VoidCallback? onPressed,
+                  required IconData icon,
+                  required String label,
+                  required String tightLabel,
+                }) => Expanded(
+                  child: tight
+                      ? OutlinedButton(
+                          onPressed: onPressed,
+                          style: outlinedStyle,
+                          child: Text(tightLabel),
                         )
-                        .toList(),
-                    onChanged: liberos.isEmpty ? null : onLiberoChanged,
-                  ),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: onLiberoSwap,
-                  style: tonalStyle,
-                  icon: Icon(Icons.sync_alt, size: compact ? 17 : 24),
-                  label: const Text('Quick swap'),
-                ),
-              ],
+                      : OutlinedButton.icon(
+                          onPressed: onPressed,
+                          style: outlinedStyle,
+                          icon: Icon(icon),
+                          label: Text(label),
+                        ),
+                );
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        firstRowButton(
+                          onPressed: onEditLineup,
+                          icon: Icons.format_list_numbered,
+                          label: 'R-5 lineup • Set $setNumber',
+                          tightLabel: 'R-5 • Set $setNumber',
+                        ),
+                        const SizedBox(width: 8),
+                        firstRowButton(
+                          onPressed: onSubstitution,
+                          icon: Icons.swap_horiz,
+                          label: 'Substitution ($substitutionsUsed)',
+                          tightLabel: 'Subs ($substitutionsUsed)',
+                        ),
+                        const SizedBox(width: 8),
+                        firstRowButton(
+                          onPressed: onTimeout,
+                          icon: Icons.timer_outlined,
+                          label: 'Timeout ($timeoutsUsed/2)',
+                          tightLabel: 'Timeout ($timeoutsUsed/2)',
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: compact ? 6 : 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            key: ValueKey('libero-$selectedLiberoId'),
+                            initialValue: selectedLiberoId,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: 'Libero',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: compact ? 8 : 12,
+                                vertical: compact ? 6 : 10,
+                              ),
+                            ),
+                            hint: const Text('No libero'),
+                            items: liberos
+                                .map(
+                                  (player) => DropdownMenuItem(
+                                    value: player.id,
+                                    child: Text(
+                                      '#${player.number} ${player.name}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: liberos.isEmpty ? null : onLiberoChanged,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (tight)
+                          FilledButton.tonal(
+                            onPressed: onLiberoSwap,
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            child: const Text('Quick swap'),
+                          )
+                        else
+                          FilledButton.tonalIcon(
+                            onPressed: onLiberoSwap,
+                            style: tonalStyle,
+                            icon: const Icon(Icons.sync_alt),
+                            label: const Text('Quick swap'),
+                          ),
+                        const SizedBox(width: 8),
+                        Chip(
+                          padding: tight ? EdgeInsets.zero : null,
+                          visualDensity: tight ? VisualDensity.compact : null,
+                          label: Text('Rotation $rotation'),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
             SizedBox(height: compact ? 6 : 14),
             Text(
@@ -936,28 +963,87 @@ class _EntryPanel extends StatelessWidget {
               denseDesktop: denseSkillButtons,
             ),
             SizedBox(height: compact ? 4 : 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: () =>
-                      onAdd(Skill.opponentError, ActionGrade.success, team),
-                  style: tonalStyle,
-                  icon: Icon(Icons.add_circle_outline, size: compact ? 17 : 24),
-                  label: const Text('OPP ERR  •  OP+'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () =>
-                      onAdd(Skill.teamFault, ActionGrade.error, team),
-                  style: outlinedStyle,
-                  icon: Icon(
-                    Icons.remove_circle_outline,
-                    size: compact ? 17 : 24,
-                  ),
-                  label: const Text('TEAM FAULT  •  T-'),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final narrow = constraints.maxWidth < 720;
+                if (narrow) {
+                  final compactFilledStyle = FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    visualDensity: VisualDensity.compact,
+                  );
+                  final compactOutlinedStyle = OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    visualDensity: VisualDensity.compact,
+                  );
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.tonal(
+                          onPressed: () => onAdd(
+                            Skill.opponentError,
+                            ActionGrade.success,
+                            team,
+                          ),
+                          style: compactFilledStyle,
+                          child: const Text('OPP ERR  •  OP+'),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () =>
+                              onAdd(Skill.teamFault, ActionGrade.error, team),
+                          style: compactOutlinedStyle,
+                          child: const Text('TEAM FAULT  •  T-'),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: onEnter,
+                          style: compactFilledStyle,
+                          child: const Text('Enter'),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: () =>
+                          onAdd(Skill.opponentError, ActionGrade.success, team),
+                      style: tonalStyle,
+                      icon: Icon(
+                        Icons.add_circle_outline,
+                        size: compact ? 17 : 24,
+                      ),
+                      label: const Text('OPP ERR  •  OP+'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          onAdd(Skill.teamFault, ActionGrade.error, team),
+                      style: outlinedStyle,
+                      icon: Icon(
+                        Icons.remove_circle_outline,
+                        size: compact ? 17 : 24,
+                      ),
+                      label: const Text('TEAM FAULT  •  T-'),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed: onEnter,
+                      style: tonalStyle,
+                      icon: Icon(
+                        Icons.keyboard_return,
+                        size: compact ? 17 : 24,
+                      ),
+                      label: const Text('Enter'),
+                    ),
+                  ],
+                );
+              },
             ),
             if (pending.isNotEmpty) ...[
               SizedBox(height: compact ? 4 : 14),

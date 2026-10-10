@@ -49,6 +49,26 @@ class MatchScore {
 class ScoringEngine {
   const ScoringEngine();
 
+  String? inferRallyWinner(
+    Game game,
+    String trackedTeamId,
+    List<TeamAction> actions,
+  ) {
+    if (actions.isEmpty) return null;
+    final last = actions.last;
+    if (last.grade == ActionGrade.error) {
+      return _otherTeam(game, trackedTeamId);
+    }
+    if (last.grade == ActionGrade.success &&
+        (last.skill == Skill.serve ||
+            last.skill == Skill.attack ||
+            last.skill == Skill.block ||
+            last.skill == Skill.opponentError)) {
+      return trackedTeamId;
+    }
+    return null;
+  }
+
   MatchScore score(Game game, ScorerLog log, MatchRules rules) {
     var homeSets = 0;
     var awaySets = 0;

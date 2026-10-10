@@ -107,22 +107,78 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('NET • FRONT ROW'), findsOneWidget);
-    expect(find.text('R-5 lineup • Set 1'), findsOneWidget);
-    expect(find.text('Substitution (0)'), findsOneWidget);
+    expect(find.text('R-5 • Set 1'), findsOneWidget);
+    expect(find.text('Subs (0)'), findsOneWidget);
     expect(find.text('Timeout (1/2)'), findsOneWidget);
     expect(find.text('Libero'), findsOneWidget);
     expect(find.text('Quick swap'), findsOneWidget);
+    final r5Center = tester.getCenter(find.text('R-5 • Set 1'));
+    final subsCenter = tester.getCenter(find.text('Subs (0)'));
+    final timeoutCenter = tester.getCenter(find.text('Timeout (1/2)'));
+    final liberoCenter = tester.getCenter(
+      find.ancestor(
+        of: find.text('Libero'),
+        matching: find.byType(DropdownButtonFormField<String>),
+      ),
+    );
+    final quickSwapCenter = tester.getCenter(
+      find.ancestor(
+        of: find.text('Quick swap'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    final rotationCenter = tester.getCenter(
+      find.ancestor(
+        of: find.text('Rotation 1').first,
+        matching: find.byType(Chip),
+      ),
+    );
+    expect(r5Center.dy, subsCenter.dy);
+    expect(r5Center.dy, timeoutCenter.dy);
+    expect(liberoCenter.dy, quickSwapCenter.dy);
+    expect(liberoCenter.dy, rotationCenter.dy);
+    expect(liberoCenter.dy, greaterThan(r5Center.dy));
+    expect(r5Center.dx, lessThan(subsCenter.dx));
+    expect(subsCenter.dx, lessThan(timeoutCenter.dx));
+    expect(liberoCenter.dx, lessThan(quickSwapCenter.dx));
+    expect(quickSwapCenter.dx, lessThan(rotationCenter.dx));
+    expect(find.text('Enter'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find
+                .ancestor(
+                  of: find.text('Enter'),
+                  matching: find.byType(FilledButton),
+                )
+                .first,
+          )
+          .onPressed,
+      isNull,
+    );
     expect(find.text('#1'), findsWidgets);
     expect(find.text('ATT'), findsNWidgets(6));
     expect(find.text('EXC'), findsNWidgets(6));
     expect(find.text('ERR'), findsNWidgets(6));
     expect(find.text('OPP ERR  •  OP+'), findsOneWidget);
     expect(find.text('TEAM FAULT  •  T-'), findsOneWidget);
+    final opponentErrorCenter = tester.getCenter(find.text('OPP ERR  •  OP+'));
+    final teamFaultCenter = tester.getCenter(find.text('TEAM FAULT  •  T-'));
+    final enterCenter = tester.getCenter(find.text('Enter'));
+    expect(enterCenter.dy, opponentErrorCenter.dy);
+    expect(enterCenter.dy, teamFaultCenter.dy);
+    expect(enterCenter.dx, greaterThan(teamFaultCenter.dx));
     expect(find.text('Home 4'), findsOneWidget);
     expect(find.text('UT • IV'), findsOneWidget);
+    expect(find.text('Tap a team panel to award the next rally'), findsNothing);
+    expect(
+      find.ancestor(of: find.text('HOM'), matching: find.byType(InkWell)),
+      findsNothing,
+    );
 
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     await tester.pumpAndSettle();
+    expect(find.text('Quick swap'), findsOneWidget);
     final scoreboard = tester.getTopLeft(find.text('SET 1'));
     final timeline = tester.getTopLeft(find.text('Event timeline'));
     final playerActions = tester.getTopLeft(find.text('Player actions'));
@@ -150,6 +206,19 @@ void main() {
     await tester.pump();
     expect(find.text('V1'), findsNothing);
     expect(find.text('V1+'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find
+                .ancestor(
+                  of: find.text('Enter'),
+                  matching: find.byType(FilledButton),
+                )
+                .first,
+          )
+          .onPressed,
+      isNotNull,
+    );
 
     await tester.tap(find.text('EXC').first);
     await tester.pump();
@@ -169,6 +238,7 @@ void main() {
     for (final size in [const Size(810, 1080), const Size(1080, 810)]) {
       await tester.binding.setSurfaceSize(size);
       await tester.pumpAndSettle();
+      expect(find.text('Quick swap'), findsOneWidget);
       final entryScroll = find.byKey(const ValueKey('tracker-entry-scroll'));
       expect(entryScroll, findsOneWidget);
       final scrollable = tester.state<ScrollableState>(
@@ -186,6 +256,11 @@ void main() {
       expect(find.text('TEAM FAULT  •  T-'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
+
+    await tester.tap(find.text('Enter'));
+    await tester.pumpAndSettle();
+    expect(find.text('AWY point  •  0-1'), findsOneWidget);
+    expect(find.text('T-'), findsNothing);
   });
 
   testWidgets('R-5 lineup opens a player dropdown from each court position', (
@@ -248,7 +323,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('R-5 lineup • Set 1'));
+    await tester.tap(find.text('R-5 • Set 1'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Tap a player on the court'), findsOneWidget);

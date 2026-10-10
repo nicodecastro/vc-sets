@@ -68,6 +68,48 @@ void main() {
     );
   });
 
+  test('last decisive action infers the rally winner', () {
+    final game = testGame();
+    final now = DateTime.utc(2026, 10, 2);
+    TeamAction action(Skill skill, ActionGrade grade) => TeamAction(
+      id: '${skill.name}-${grade.name}',
+      teamId: homeTeam.id,
+      playerId: homeTeam.players.first.id,
+      skill: skill,
+      grade: grade,
+      recordedAt: now,
+    );
+
+    for (final skill in [
+      Skill.serve,
+      Skill.attack,
+      Skill.block,
+      Skill.opponentError,
+    ]) {
+      expect(
+        engine.inferRallyWinner(game, homeTeam.id, [
+          action(skill, ActionGrade.success),
+        ]),
+        homeTeam.id,
+      );
+    }
+    for (final skill in Skill.values) {
+      expect(
+        engine.inferRallyWinner(game, homeTeam.id, [
+          action(skill, ActionGrade.error),
+        ]),
+        awayTeam.id,
+      );
+    }
+    expect(
+      engine.inferRallyWinner(game, homeTeam.id, [
+        action(Skill.dig, ActionGrade.success),
+      ]),
+      isNull,
+    );
+    expect(engine.inferRallyWinner(game, homeTeam.id, const []), isNull);
+  });
+
   test('three completed sets complete a match and preserve set count', () {
     final game = testGame();
     var log = testLog();
