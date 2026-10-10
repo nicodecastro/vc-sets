@@ -191,13 +191,16 @@ void main() {
       createdAt: now,
       updatedAt: now,
       initialServingTeamId: team.id,
+      lineups: [
+        LineupSnapshot(teamId: team.id, playerIds: [first.id], setNumber: 1),
+      ],
       rallies: [
         Rally(
           id: 'rally',
           setNumber: 1,
           sequence: 1,
           winnerTeamId: team.id,
-          homeScore: 1,
+          homeScore: 25,
           awayScore: 0,
           homeRotation: 1,
           awayRotation: 1,
@@ -270,15 +273,22 @@ void main() {
     expect(ana.counts['D+'], 1);
     expect(ana.counts['OP+'], 2);
     expect(ana.counts['T-'], 1);
+    expect(ana.gamesPlayed, 1);
+    expect(ana.setsPlayed, 1);
+    expect(ana.gamesWon, 1);
     expect(bea.lastName, 'Cruz');
     expect(bea.counts['S'], 0);
     expect(bea.counts['OP+'], 2);
     expect(bea.counts['T-'], 1);
+    expect(bea.gamesPlayed, 0);
+    expect(bea.setsPlayed, 0);
+    expect(bea.gamesWon, 0);
     final csv = const FileExchangeService().playerStatsCsv(tournament);
     expect(
       csv.split('\r\n').first,
-      'Team,Last name,Number,${playerStatColumns.join(',')}',
+      'Team,Last name,Number,${playerStatColumns.join(',')},Games played,Sets played,Games won',
     );
     expect(csv, contains('"${team.name}","Santos",2,'));
+    expect(csv, contains(',1,1,1'));
   });
 }

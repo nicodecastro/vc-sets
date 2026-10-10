@@ -364,6 +364,7 @@ void main() {
   testWidgets('reconciliation decisions show each device full rally', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(430, 1000));
     final now = DateTime.utc(2026, 10, 2);
     final primary = ScorerLog(
       id: 'primary',
@@ -460,10 +461,11 @@ void main() {
       games: [game],
     );
     final data = AppData(deviceId: 'test-device', tournaments: [tournament]);
+    final repository = MemoryAppRepository(data);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          appRepositoryProvider.overrideWithValue(MemoryAppRepository(data)),
+          appRepositoryProvider.overrideWithValue(repository),
           initialAppDataProvider.overrideWithValue(data),
         ],
         child: const MaterialApp(
@@ -476,6 +478,60 @@ void main() {
     expect(find.text('1-0 • V1  B2+'), findsOneWidget);
     expect(find.text('0-1 • A7-'), findsOneWidget);
     expect(find.textContaining('winner '), findsNothing);
+    expect(find.text('The reconciled match is incomplete'), findsOneWidget);
+    expect(
+      find.textContaining('Set 1 is 1-0; a team must reach 25'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Best of 5'));
+    await tester.tap(find.text('Best of 5'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Best of 3').last);
+    await tester.pumpAndSettle();
+    final savedGame = (await repository.load()).tournaments.single.games.single;
+    expect(savedGame.rulesSnapshot?.maxSets, 3);
+    expect(savedGame.rulesSnapshot?.setsToWin, 2);
+
+    await tester.ensureVisible(find.text('Manual override'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Manual override'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit individual rallies'), findsOneWidget);
+    expect(find.text('Set 1 • Rally 1 • 1-0'), findsOneWidget);
+
+    await tester.ensureVisible(find.byTooltip('Edit rally'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit rally'));
+    await tester.pumpAndSettle();
+    expect(find.text('Override set 1, rally 1'), findsOneWidget);
+    expect(find.text('Rally actions'), findsOneWidget);
+    expect(find.text('Team 1 • HOM'), findsOneWidget);
+    expect(find.text('Team 2 • AWY'), findsOneWidget);
+    expect(find.text('serve'), findsNothing);
+    await tester.enterText(
+      find.byKey(ValueKey('raw-actions-${homeTeam.id}')),
+      'R1\nB2+',
+    );
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'HOM score',
+      ),
+      '25',
+    );
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Override reason',
+      ),
+      'Verified from the scoresheet',
+    );
+    await tester.tap(find.text('Save override'));
+    await tester.pumpAndSettle();
+    expect(find.text('Manual override (1)'), findsOneWidget);
+    expect(find.text('Set 1 • Rally 1 • 25-0'), findsOneWidget);
+    expect(find.text('R1  B2+  A7-'), findsOneWidget);
   });
 
   testWidgets('finalized games replace reconcile with an audit summary', (
@@ -616,6 +672,9 @@ void main() {
     expect(find.text('V-'), findsOneWidget);
     expect(find.text('OP+'), findsOneWidget);
     expect(find.text('T-'), findsOneWidget);
+    expect(find.text('Games played'), findsOneWidget);
+    expect(find.text('Sets played'), findsOneWidget);
+    expect(find.text('Games won'), findsOneWidget);
   });
 
   testWidgets('games tab offers game package export', (tester) async {

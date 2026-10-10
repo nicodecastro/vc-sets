@@ -93,6 +93,7 @@ class ReconciliationService {
     required Set<String> preferImported,
     required String officialLogId,
     required DateTime now,
+    Map<String, Rally> rallyOverrides = const {},
   }) {
     final first = {
       for (final rally in result.primary.rallies) rally.alignmentKey: rally,
@@ -104,8 +105,13 @@ class ReconciliationService {
       ..sort(_compareKeys);
     final merged = <Rally>[];
     for (final key in keys) {
+      final override = rallyOverrides[key];
+      if (override != null) {
+        merged.add(override);
+        continue;
+      }
       final chosen = preferImported.contains(key)
-          ? second[key]
+          ? (second[key] ?? first[key])
           : (first[key] ?? second[key]);
       if (chosen == null) continue;
       final other = identical(chosen, first[key]) ? second[key] : first[key];

@@ -126,6 +126,22 @@ class ScoringEngine {
         (home - away).abs() >= rules.winBy;
   }
 
+  String? incompleteMatchReason(Game game, ScorerLog log, MatchRules rules) {
+    final current = score(game, log, rules);
+    if (current.isComplete) return null;
+    if (log.rallies.isEmpty) {
+      return 'The reconciled log has no rallies. A team must win '
+          '${rules.setsToWin} set(s) to complete this match.';
+    }
+    final target = rules.maxSets > 1 && current.setNumber == rules.maxSets
+        ? rules.decidingSetTarget
+        : rules.regularSetTarget;
+    return 'The reconciled result is ${current.homeSets}-${current.awaySets} '
+        'in sets, but ${rules.setsToWin} set win(s) are required. '
+        'Set ${current.setNumber} is ${current.homePoints}-${current.awayPoints}; '
+        'a team must reach $target with a ${rules.winBy}-point lead.';
+  }
+
   Rally nextRally({
     required String id,
     required Game game,

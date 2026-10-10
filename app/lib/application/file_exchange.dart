@@ -105,11 +105,11 @@ class FileExchangeService {
   String playerStatsCsv(Tournament tournament) {
     final rows = const StatisticsService().playerStatsSummary(tournament);
     final buffer = StringBuffer(
-      'Team,Last name,Number,${playerStatColumns.join(',')}\r\n',
+      'Team,Last name,Number,${playerStatColumns.join(',')},Games played,Sets played,Games won\r\n',
     );
     for (final row in rows) {
       buffer.writeln(
-        '${_csv(row.team.name)},${_csv(row.lastName)},${row.player.number},${playerStatColumns.map((column) => row.counts[column] ?? 0).join(',')}',
+        '${_csv(row.team.name)},${_csv(row.lastName)},${row.player.number},${playerStatColumns.map((column) => row.counts[column] ?? 0).join(',')},${row.gamesPlayed},${row.setsPlayed},${row.gamesWon}',
       );
     }
     return buffer.toString();
@@ -137,11 +137,14 @@ ${[for (var i = 0; i < standings.length; i++) '<tr><td>${i + 1}</td><td>${_html(
       'Last name',
       '#',
       ...playerStatColumns,
+      'Games played',
+      'Sets played',
+      'Games won',
     ].map((column) => '<th>${_html(column)}</th>').join();
     final playerRows = playerStats
         .map(
           (row) =>
-              '<tr><td>${_html(row.team.name)}</td><td>${_html(row.lastName)}</td><td>${row.player.number}</td>${playerStatColumns.map((column) => '<td>${row.counts[column] ?? 0}</td>').join()}</tr>',
+              '<tr><td>${_html(row.team.name)}</td><td>${_html(row.lastName)}</td><td>${row.player.number}</td>${playerStatColumns.map((column) => '<td>${row.counts[column] ?? 0}</td>').join()}<td>${row.gamesPlayed}</td><td>${row.setsPlayed}</td><td>${row.gamesWon}</td></tr>',
         )
         .join();
     final html =

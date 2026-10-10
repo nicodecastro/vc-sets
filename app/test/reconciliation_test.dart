@@ -104,4 +104,65 @@ void main() {
     );
     expect(merged.rallies.single.winnerTeamId, awayTeam.id);
   });
+
+  test('missing-side choice keeps the available rally', () {
+    final primary = testLog(rallies: [rally('a1', 1, 'home', 1, 0)]);
+    final imported = testLog(
+      id: 'log-b',
+      deviceId: 'device-b',
+      rallies: const [],
+    );
+    final result = service.compare(primary, imported);
+    final merged = service.merge(
+      result,
+      preferImported: {'1:1'},
+      officialLogId: 'official',
+      now: DateTime.utc(2026, 10, 2),
+    );
+
+    expect(merged.rallies.single.id, 'a1');
+  });
+
+  test('manual rally override replaces score and actions', () {
+    final primary = testLog(rallies: [rally('a1', 1, 'home', 1, 0)]);
+    final imported = testLog(
+      id: 'log-b',
+      deviceId: 'device-b',
+      rallies: [rally('b1', 1, 'home', 1, 0)],
+    );
+    final overrideAction = TeamAction(
+      id: 'manual-action',
+      teamId: awayTeam.id,
+      playerId: awayTeam.players.first.id,
+      skill: Skill.block,
+      grade: ActionGrade.success,
+      recordedAt: DateTime.utc(2026, 10, 2),
+    );
+    final override = Rally(
+      id: 'manual-rally',
+      setNumber: 1,
+      sequence: 1,
+      winnerTeamId: awayTeam.id,
+      homeScore: 0,
+      awayScore: 1,
+      homeRotation: 1,
+      awayRotation: 1,
+      servingTeamId: awayTeam.id,
+      recordedAt: DateTime.utc(2026, 10, 2),
+      actions: [overrideAction],
+      overrideReason: 'Corrected from the scoresheet',
+    );
+    final merged = service.merge(
+      service.compare(primary, imported),
+      preferImported: const {},
+      officialLogId: 'official',
+      now: DateTime.utc(2026, 10, 2),
+      rallyOverrides: {'1:1': override},
+    );
+
+    expect(merged.rallies.single.id, 'manual-rally');
+    expect(merged.rallies.single.awayScore, 1);
+    expect(merged.rallies.single.actions.single.id, 'manual-action');
+    expect(merged.rallies.single.overrideReason, isNotEmpty);
+  });
 }

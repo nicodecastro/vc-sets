@@ -55,12 +55,18 @@ class PlayerStatRow {
     required this.player,
     required this.lastName,
     required this.counts,
+    required this.gamesPlayed,
+    required this.setsPlayed,
+    required this.gamesWon,
   });
 
   final TournamentTeam team;
   final Player player;
   final String lastName;
   final Map<String, int> counts;
+  final int gamesPlayed;
+  final int setsPlayed;
+  final int gamesWon;
 }
 
 class StandingRow {
@@ -96,11 +102,13 @@ class StatisticsService {
   const StatisticsService();
 
   List<PlayerStatRow> playerStatsSummary(Tournament tournament) {
-    final actions = tournament.games
+    final finalizedGames = tournament.games
         .where(
           (game) =>
               game.status == GameStatus.finalized && game.officialLog != null,
         )
+        .toList();
+    final actions = finalizedGames
         .expand((game) => game.officialLog!.rallies)
         .expand((rally) => rally.actions)
         .toList();
@@ -116,6 +124,27 @@ class StatisticsService {
           .where((action) => action.skill == Skill.teamFault)
           .length;
       for (final player in team.players) {
+        var gamesPlayed = 0;
+        var setsPlayed = 0;
+        var gamesWon = 0;
+        for (final game in finalizedGames.where(
+          (game) => game.homeTeamId == team.id || game.awayTeamId == team.id,
+        )) {
+          final log = game.officialLog!;
+          final playedSets = <int>{
+            for (final setNumber
+                in log.rallies.map((rally) => rally.setNumber).toSet())
+              if (_playedSet(log, team.id, player.id, setNumber)) setNumber,
+          };
+          if (playedSets.isEmpty) continue;
+          gamesPlayed++;
+          setsPlayed += playedSets.length;
+          final result = _setResults(log, tournament.rulesFor(game));
+          final teamWon = team.id == game.homeTeamId
+              ? result.homeSets > result.awaySets
+              : result.awaySets > result.homeSets;
+          if (teamWon) gamesWon++;
+        }
         final counts = <String, int>{
           for (final column in playerStatColumns) column: 0,
         };
@@ -133,6 +162,9 @@ class StatisticsService {
             player: player,
             lastName: _lastName(player.name),
             counts: counts,
+            gamesPlayed: gamesPlayed,
+            setsPlayed: setsPlayed,
+            gamesWon: gamesWon,
           ),
         );
       }
@@ -277,6 +309,32 @@ class StatisticsService {
       }
     }
     return (homeSets: homeSets, awaySets: awaySets);
+  }
+
+  bool _playedSet(
+    ScorerLog log,
+    String teamId,
+    String playerId,
+    int setNumber,
+  ) {
+    if (log.lineupFor(teamId, setNumber)?.playerIds.contains(playerId) ??
+        false) {
+      return true;
+    }
+    if (log.substitutions.any(
+      (item) =>
+          item.teamId == teamId &&
+          item.setNumber == setNumber &&
+          (item.playerInId == playerId || item.playerOutId == playerId),
+    )) {
+      return true;
+    }
+    return log.rallies
+        .where((rally) => rally.setNumber == setNumber)
+        .expand((rally) => rally.actions)
+        .any(
+          (action) => action.teamId == teamId && action.playerId == playerId,
+        );
   }
 
   String? _playerStatColumn(TeamAction action) {

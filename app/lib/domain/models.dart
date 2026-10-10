@@ -737,6 +737,7 @@ class Game {
   final List<FinalizationRevision> revisions;
 
   Game copyWith({
+    MatchRules? rulesSnapshot,
     GameStatus? status,
     List<ScorerLog>? logs,
     ScorerLog? officialLog,
@@ -754,7 +755,7 @@ class Game {
     bracketRound: bracketRound,
     bracketOrder: bracketOrder,
     bracketType: bracketType,
-    rulesSnapshot: rulesSnapshot,
+    rulesSnapshot: rulesSnapshot ?? this.rulesSnapshot,
     status: status ?? this.status,
     logs: logs ?? this.logs,
     officialLog: clearOfficialLog ? null : (officialLog ?? this.officialLog),

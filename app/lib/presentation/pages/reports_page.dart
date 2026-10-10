@@ -185,6 +185,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         const DataColumn(label: Text('#'), numeric: true),
         for (final column in playerStatColumns)
           DataColumn(label: Text(column), numeric: true),
+        const DataColumn(label: Text('Games played'), numeric: true),
+        const DataColumn(label: Text('Sets played'), numeric: true),
+        const DataColumn(label: Text('Games won'), numeric: true),
       ],
       rows: [
         for (final row in rows)
@@ -195,6 +198,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               DataCell(Text('${row.player.number}')),
               for (final column in playerStatColumns)
                 DataCell(Text('${row.counts[column] ?? 0}')),
+              DataCell(Text('${row.gamesPlayed}')),
+              DataCell(Text('${row.setsPlayed}')),
+              DataCell(Text('${row.gamesWon}')),
             ],
           ),
       ],

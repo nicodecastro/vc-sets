@@ -1177,6 +1177,7 @@ class AppController extends Notifier<AppData> {
     String gameId, {
     required Set<String> preferImported,
     required String reason,
+    Map<String, Rally> rallyOverrides = const {},
   }) async {
     await _updateGame(tournamentId, gameId, (tournament, game) {
       if (game.logs.length < 2) {
@@ -1192,16 +1193,15 @@ class AppController extends Notifier<AppData> {
         preferImported: preferImported,
         officialLogId: _uuid.v4(),
         now: now,
+        rallyOverrides: rallyOverrides,
       );
-      final score = const ScoringEngine().score(
+      final incompleteReason = const ScoringEngine().incompleteMatchReason(
         game,
         official,
         tournament.rulesFor(game),
       );
-      if (!score.isComplete) {
-        throw StateError(
-          'The reconciled score does not contain a complete match.',
-        );
+      if (incompleteReason != null) {
+        throw StateError(incompleteReason);
       }
       final revision = FinalizationRevision(
         id: _uuid.v4(),
@@ -1213,6 +1213,32 @@ class AppController extends Notifier<AppData> {
         status: GameStatus.finalized,
         officialLog: official,
         revisions: [...game.revisions, revision],
+      );
+    });
+  }
+
+  Future<void> updateGameMatchFormat(
+    String tournamentId,
+    String gameId,
+    int maxSets,
+  ) async {
+    if (maxSets != 1 && maxSets != 3 && maxSets != 5) {
+      throw StateError(
+        'Match format must be one set, best of three, or best of five.',
+      );
+    }
+    await _updateGame(tournamentId, gameId, (tournament, game) {
+      if (game.status == GameStatus.finalized) {
+        throw StateError(
+          'Reopen the finalized game before changing its format.',
+        );
+      }
+      final rules = tournament.rulesFor(game);
+      return game.copyWith(
+        rulesSnapshot: rules.copyWith(
+          maxSets: maxSets,
+          setsToWin: (maxSets ~/ 2) + 1,
+        ),
       );
     });
   }

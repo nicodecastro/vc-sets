@@ -39,6 +39,28 @@ void main() {
     expect(score.isComplete, isTrue);
   });
 
+  test('incomplete match reason identifies sets and points still required', () {
+    final game = testGame();
+    final log = testLog(
+      rallies: [
+        engine.nextRally(
+          id: 'r1',
+          game: game,
+          log: testLog(),
+          rules: rules,
+          winnerTeamId: homeTeam.id,
+          recordedAt: DateTime.utc(2026, 10, 2),
+        ),
+      ],
+    );
+
+    expect(
+      engine.incompleteMatchReason(game, log, rules),
+      'The reconciled result is 0-0 in sets, but 3 set win(s) are required. '
+      'Set 1 is 1-0; a team must reach 25 with a 2-point lead.',
+    );
+  });
+
   test('sideout rotates receiving team and winner serves', () {
     final game = testGame();
     final empty = testLog();
