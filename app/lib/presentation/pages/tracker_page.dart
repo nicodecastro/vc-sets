@@ -216,7 +216,13 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
                       !lineupReady ||
                       selectedPlayerId == null ||
                       selectedLiberoId == null ||
-                      courtPlayerIds.length != 6
+                      courtPlayerIds.length != 6 ||
+                      (selectedPlayerId != selectedLiberoId &&
+                          ![
+                            courtPlayerIds[0],
+                            courtPlayerIds[4],
+                            courtPlayerIds[5],
+                          ].contains(selectedPlayerId))
                   ? null
                   : _recordLiberoSwap,
               onManualRotate: score.isComplete || !lineupReady
@@ -1597,7 +1603,11 @@ class _Timeline extends StatelessWidget {
               : '#${incoming.number} in • #${outgoing.number} out',
         ),
         subtitle: Text(
-          '${substitution.isLiberoReplacement ? 'Libero replacement • ' : ''}Set ${substitution.setNumber} • ${substitution.homeScore}-${substitution.awayScore}',
+          '${substitution.automaticAfterEventId != null
+              ? 'Automatic libero return • '
+              : substitution.isLiberoReplacement
+              ? 'Libero replacement • '
+              : ''}Set ${substitution.setNumber} • ${substitution.homeScore}-${substitution.awayScore}',
         ),
       );
     }

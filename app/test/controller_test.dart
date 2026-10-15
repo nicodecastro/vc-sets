@@ -898,6 +898,88 @@ void main() {
     );
     expect(log.substitutions, hasLength(2));
     expect(log.substitutions.every((item) => item.isLiberoReplacement), isTrue);
+
+    await expectLater(
+      controller.recordLiberoSwap(
+        'tournament',
+        'game',
+        selectedPlayerId: regularPlayerIds[1],
+        liberoId: libero.id,
+      ),
+      throwsStateError,
+    );
+    await controller.recordLiberoSwap(
+      'tournament',
+      'game',
+      selectedPlayerId: regularPlayerIds[4],
+      liberoId: libero.id,
+    );
+    await controller.awardRally(
+      'tournament',
+      'game',
+      winnerTeamId: trackedHome.id,
+      actions: const [],
+    );
+    log = (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(log.serviceOrderFor(trackedHome.id, 1)[4], libero.id);
+    expect(log.substitutions, hasLength(3));
+
+    await controller.awardRally(
+      'tournament',
+      'game',
+      winnerTeamId: awayTeam.id,
+      actions: const [],
+    );
+    await controller.awardRally(
+      'tournament',
+      'game',
+      winnerTeamId: trackedHome.id,
+      actions: const [],
+    );
+    log = (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(log.serviceOrderFor(trackedHome.id, 1)[4], regularPlayerIds[4]);
+    expect(log.substitutions, hasLength(4));
+    expect(log.substitutions.last.automaticAfterEventId, log.rallies.last.id);
+    expect(
+      Substitution.fromJson(log.substitutions.last.toJson())
+          .automaticAfterEventId,
+      log.rallies.last.id,
+    );
+
+    await controller.undoLastRally('tournament', 'game', 'Wrong point');
+    log = (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(log.serviceOrderFor(trackedHome.id, 1)[4], libero.id);
+    expect(log.substitutions, hasLength(3));
+    await controller.awardRally(
+      'tournament',
+      'game',
+      winnerTeamId: trackedHome.id,
+      actions: const [],
+    );
+    await controller.recordLiberoSwap(
+      'tournament',
+      'game',
+      selectedPlayerId: regularPlayerIds[5],
+      liberoId: libero.id,
+    );
+    await controller.rotateLineupManually('tournament', 'game');
+    log = (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(log.serviceOrderFor(trackedHome.id, 1)[5], regularPlayerIds[5]);
+    expect(
+      log.substitutions.last.automaticAfterEventId,
+      log.rotationAdjustments.last.id,
+    );
+
+    await controller.recordLiberoSwap(
+      'tournament',
+      'game',
+      selectedPlayerId: regularPlayerIds[1],
+      liberoId: libero.id,
+    );
+    await controller.rotateLineupManually('tournament', 'game');
+    log = (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(log.serviceOrderFor(trackedHome.id, 1)[1], libero.id);
+    expect(log.substitutions.last.automaticAfterEventId, isNull);
   });
 
   test('links a separately created scorer log to a local game', () async {

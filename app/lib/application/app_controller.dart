@@ -883,6 +883,15 @@ class AppController extends Notifier<AppData> {
         outgoing = liberoId;
         incomingPlayerId = replacements.first.playerOutId;
       } else {
+        final court = log.courtOrderFor(
+          team.id,
+          score.setNumber,
+          team.id == game.homeTeamId ? score.homeRotation : score.awayRotation,
+        );
+        if (court.length != 6 ||
+            ![court[0], court[4], court[5]].contains(selectedPlayerId)) {
+          throw StateError('A libero can replace only a back-row player.');
+        }
         outgoing = selectedPlayerId;
         incomingPlayerId = liberoId;
       }
@@ -934,24 +943,88 @@ class AppController extends Notifier<AppData> {
           : score.awayRotation;
       final now = DateTime.now();
       final logs = [...game.logs];
-      logs[index] = log.copyWith(
+      final adjustment = RotationAdjustment(
+        id: _uuid.v4(),
+        teamId: log.assignedTeamId,
+        setNumber: score.setNumber,
+        afterRallySequence: log.rallies
+            .where((rally) => rally.setNumber == score.setNumber)
+            .length,
+        rotation: currentRotation % 6 + 1,
+        recordedAt: now,
+      );
+      final rotatedLog = log.copyWith(
         updatedAt: now,
-        rotationAdjustments: [
-          ...log.rotationAdjustments,
-          RotationAdjustment(
-            id: _uuid.v4(),
-            teamId: log.assignedTeamId,
-            setNumber: score.setNumber,
-            afterRallySequence: log.rallies
-                .where((rally) => rally.setNumber == score.setNumber)
-                .length,
-            rotation: currentRotation % 6 + 1,
-            recordedAt: now,
-          ),
-        ],
+        rotationAdjustments: [...log.rotationAdjustments, adjustment],
+      );
+      final rotatedScore = const ScoringEngine().score(
+        game,
+        rotatedLog,
+        tournament.rulesFor(game),
+      );
+      logs[index] = _restoreFrontRowLibero(
+        tournament,
+        game,
+        rotatedLog,
+        rotatedScore,
+        adjustment.id,
       );
       return game.copyWith(logs: logs);
     });
+  }
+
+  ScorerLog _restoreFrontRowLibero(
+    Tournament tournament,
+    Game game,
+    ScorerLog log,
+    MatchScore score,
+    String triggerEventId,
+  ) {
+    if (score.isComplete) return log;
+    final team = tournament.team(log.assignedTeamId);
+    final rotation = team.id == game.homeTeamId
+        ? score.homeRotation
+        : score.awayRotation;
+    final court = log.courtOrderFor(team.id, score.setNumber, rotation);
+    if (court.length != 6) return log;
+    final frontRow = court.sublist(1, 4);
+    final liberos = team.players.where(
+      (player) => player.isLibero && frontRow.contains(player.id),
+    );
+    if (liberos.isEmpty) return log;
+    final libero = liberos.first;
+    final serviceOrder = log.serviceOrderFor(team.id, score.setNumber);
+    final replacements = log.substitutions
+        .where(
+          (item) =>
+              item.teamId == team.id &&
+              item.setNumber == score.setNumber &&
+              item.isLiberoReplacement &&
+              item.playerInId == libero.id &&
+              !serviceOrder.contains(item.playerOutId),
+        )
+        .toList()
+        .reversed;
+    if (replacements.isEmpty) return log;
+    final now = DateTime.now();
+    return log.copyWith(
+      updatedAt: now,
+      substitutions: [
+        ...log.substitutions,
+        Substitution(
+          id: _uuid.v4(),
+          teamId: team.id,
+          setNumber: score.setNumber,
+          playerOutId: libero.id,
+          playerInId: replacements.first.playerOutId,
+          homeScore: score.homePoints,
+          awayScore: score.awayPoints,
+          recordedAt: now,
+          kind: SubstitutionKind.liberoReplacement,
+          automaticAfterEventId: triggerEventId,
+        ),
+      ],
+    );
   }
 
   Future<void> recordTimeout(String tournamentId, String gameId) async {
@@ -1022,9 +1095,12 @@ class AppController extends Notifier<AppData> {
           'This device can record player actions only for its assigned team.',
         );
       }
-      final currentSet = const ScoringEngine()
-          .score(game, log, tournament.rulesFor(game))
-          .setNumber;
+      final before = const ScoringEngine().score(
+        game,
+        log,
+        tournament.rulesFor(game),
+      );
+      final currentSet = before.setNumber;
       if (log.lineupFor(log.assignedTeamId, currentSet) == null) {
         throw StateError('Save the R-5 lineup for this set first.');
       }
@@ -1039,15 +1115,32 @@ class AppController extends Notifier<AppData> {
         overrideReason: overrideReason,
       );
       final logs = [...game.logs];
-      logs[index] = log.copyWith(
+      var updatedLog = log.copyWith(
         updatedAt: DateTime.now(),
         rallies: [...log.rallies, rally],
       );
       final score = const ScoringEngine().score(
         game,
-        logs[index],
+        updatedLog,
         tournament.rulesFor(game),
       );
+      final previousRotation = log.assignedTeamId == game.homeTeamId
+          ? before.homeRotation
+          : before.awayRotation;
+      final currentRotation = log.assignedTeamId == game.homeTeamId
+          ? rally.homeRotation
+          : rally.awayRotation;
+      if (score.setNumber == rally.setNumber &&
+          currentRotation != previousRotation) {
+        updatedLog = _restoreFrontRowLibero(
+          tournament,
+          game,
+          updatedLog,
+          score,
+          rally.id,
+        );
+      }
+      logs[index] = updatedLog;
       return game.copyWith(
         status: score.isComplete
             ? GameStatus.awaitingReconciliation
@@ -1073,6 +1166,9 @@ class AppController extends Notifier<AppData> {
       logs[index] = log.copyWith(
         updatedAt: DateTime.now(),
         rallies: log.rallies.sublist(0, log.rallies.length - 1),
+        substitutions: log.substitutions
+            .where((item) => item.automaticAfterEventId != removed.id)
+            .toList(),
         corrections: [
           ...log.corrections,
           Correction(

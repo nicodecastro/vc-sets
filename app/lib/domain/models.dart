@@ -448,6 +448,7 @@ class Substitution {
     required this.awayScore,
     required this.recordedAt,
     this.kind = SubstitutionKind.regular,
+    this.automaticAfterEventId,
   });
 
   final String id;
@@ -459,6 +460,7 @@ class Substitution {
   final int awayScore;
   final DateTime recordedAt;
   final SubstitutionKind kind;
+  final String? automaticAfterEventId;
 
   bool get isLiberoReplacement => kind == SubstitutionKind.liberoReplacement;
 
@@ -472,6 +474,8 @@ class Substitution {
     'awayScore': awayScore,
     'recordedAt': recordedAt.toUtc().toIso8601String(),
     'kind': kind.name,
+    if (automaticAfterEventId != null)
+      'automaticAfterEventId': automaticAfterEventId,
   };
 
   factory Substitution.fromJson(Map<String, Object?> json) => Substitution(
@@ -488,6 +492,7 @@ class Substitution {
       json['kind'],
       SubstitutionKind.regular,
     ),
+    automaticAfterEventId: json['automaticAfterEventId'] as String?,
   );
 }
 
