@@ -654,6 +654,95 @@ void main() {
     },
   );
 
+  test('requires a saved R-5 lineup before scoring each set', () async {
+    const rules = MatchRules(
+      setsToWin: 2,
+      maxSets: 3,
+      regularSetTarget: 1,
+      decidingSetTarget: 1,
+      winBy: 1,
+    );
+    final game = testGame().copyWith(rulesSnapshot: rules);
+    final initial = AppData(
+      deviceId: 'device',
+      tournaments: [
+        testTournament(games: [game]),
+      ],
+    );
+    final repository = MemoryAppRepository(initial);
+    final container = ProviderContainer(
+      overrides: [
+        appRepositoryProvider.overrideWithValue(repository),
+        initialAppDataProvider.overrideWithValue(initial),
+      ],
+    );
+    addTearDown(container.dispose);
+    final controller = container.read(appControllerProvider.notifier);
+    await controller.startScorerLog(
+      'tournament',
+      'game',
+      assignedTeamId: homeTeam.id,
+      initialServingTeamId: homeTeam.id,
+    );
+    var log =
+        (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(log.lineups, isEmpty);
+    await expectLater(
+      controller.awardRally(
+        'tournament',
+        'game',
+        winnerTeamId: homeTeam.id,
+        actions: const [],
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      controller.recordTimeout('tournament', 'game'),
+      throwsStateError,
+    );
+
+    final players = homeTeam.players.map((player) => player.id).toList();
+    await controller.setLineup(
+      'tournament',
+      'game',
+      setNumber: 1,
+      playerIds: players,
+    );
+    await controller.awardRally(
+      'tournament',
+      'game',
+      winnerTeamId: homeTeam.id,
+      actions: const [],
+    );
+    log = (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(log.lineupFor(homeTeam.id, 2), isNull);
+    expect(log.courtOrderFor(homeTeam.id, 2, 1), isEmpty);
+    await expectLater(
+      controller.awardRally(
+        'tournament',
+        'game',
+        winnerTeamId: homeTeam.id,
+        actions: const [],
+      ),
+      throwsStateError,
+    );
+
+    await controller.setLineup(
+      'tournament',
+      'game',
+      setNumber: 2,
+      playerIds: players,
+    );
+    await controller.awardRally(
+      'tournament',
+      'game',
+      winnerTeamId: homeTeam.id,
+      actions: const [],
+    );
+    log = (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(log.rallies.map((rally) => rally.setNumber), [1, 2]);
+  });
+
   test('quick libero swaps replace and restore the selected player', () async {
     const benchPlayer = Player(
       id: 'home-bench',

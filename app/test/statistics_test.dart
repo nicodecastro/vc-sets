@@ -226,6 +226,18 @@ void main() {
             action('fault', Skill.teamFault, ActionGrade.error, playerId: null),
           ],
         ),
+        Rally(
+          id: 'set-two-rally',
+          setNumber: 2,
+          sequence: 1,
+          winnerTeamId: team.id,
+          homeScore: 25,
+          awayScore: 0,
+          homeRotation: 1,
+          awayRotation: 1,
+          servingTeamId: team.id,
+          recordedAt: now,
+        ),
       ],
     );
     final game = Game(
@@ -236,6 +248,7 @@ void main() {
       scheduledAt: now,
       venue: 'Gym',
       status: GameStatus.finalized,
+      rulesSnapshot: const MatchRules(setsToWin: 2, maxSets: 3),
       officialLog: log,
     );
     final tournament = testTournament(games: [game])

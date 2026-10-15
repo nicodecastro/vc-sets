@@ -713,8 +713,6 @@ class AppController extends Notifier<AppData> {
   }) async {
     await _updateGame(tournamentId, gameId, (tournament, game) {
       if (game.logs.any((log) => log.deviceId == state.deviceId)) return game;
-      final home = tournament.team(game.homeTeamId);
-      final away = tournament.team(game.awayTeamId);
       final now = DateTime.now();
       final log = ScorerLog(
         id: _uuid.v4(),
@@ -724,18 +722,6 @@ class AppController extends Notifier<AppData> {
         createdAt: now,
         updatedAt: now,
         initialServingTeamId: initialServingTeamId,
-        lineups: [
-          LineupSnapshot(
-            teamId: home.id,
-            playerIds: home.players.take(6).map((p) => p.id).toList(),
-            recordedAt: now,
-          ),
-          LineupSnapshot(
-            teamId: away.id,
-            playerIds: away.players.take(6).map((p) => p.id).toList(),
-            recordedAt: now,
-          ),
-        ],
       );
       return game.copyWith(
         status: GameStatus.inProgress,
@@ -940,6 +926,9 @@ class AppController extends Notifier<AppData> {
         tournament.rulesFor(game),
       );
       if (score.isComplete) throw StateError('The match is already complete.');
+      if (log.lineupFor(log.assignedTeamId, score.setNumber) == null) {
+        throw StateError('Save the R-5 lineup for this set first.');
+      }
       final used = log.timeouts
           .where(
             (timeout) =>
@@ -989,6 +978,12 @@ class AppController extends Notifier<AppData> {
         throw StateError(
           'This device can record player actions only for its assigned team.',
         );
+      }
+      final currentSet = const ScoringEngine()
+          .score(game, log, tournament.rulesFor(game))
+          .setNumber;
+      if (log.lineupFor(log.assignedTeamId, currentSet) == null) {
+        throw StateError('Save the R-5 lineup for this set first.');
       }
       final rally = const ScoringEngine().nextRally(
         id: _uuid.v4(),

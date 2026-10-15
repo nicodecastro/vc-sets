@@ -631,7 +631,7 @@ class ScorerLog {
   LineupSnapshot? lineupFor(String teamId, int setNumber) {
     final candidates = lineups
         .where(
-          (lineup) => lineup.teamId == teamId && lineup.setNumber <= setNumber,
+          (lineup) => lineup.teamId == teamId && lineup.setNumber == setNumber,
         )
         .toList();
     if (candidates.isEmpty) return null;

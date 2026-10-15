@@ -69,13 +69,14 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
     final assignedRotation = assigned.id == game.homeTeamId
         ? score.homeRotation
         : score.awayRotation;
-    final courtPlayerIds = log.courtOrderFor(
-      assigned.id,
-      score.setNumber,
-      assignedRotation,
-    );
+    final lineupReady =
+        log.lineupFor(assigned.id, score.setNumber)?.playerIds.length == 6;
+    final courtPlayerIds = lineupReady
+        ? log.courtOrderFor(assigned.id, score.setNumber, assignedRotation)
+        : List<String>.filled(6, '');
     final servingPlayerId =
         !score.isComplete &&
+            lineupReady &&
             score.servingTeamId == assigned.id &&
             courtPlayerIds.isNotEmpty
         ? courtPlayerIds.first
@@ -122,7 +123,9 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
         }
       }
     }
-    if (!courtPlayerIds.contains(selectedPlayerId)) {
+    if (!lineupReady) {
+      selectedPlayerId = null;
+    } else if (!courtPlayerIds.contains(selectedPlayerId)) {
       selectedPlayerId = courtPlayerIds.firstOrNull;
     }
     final liberos = assigned.players
@@ -183,6 +186,7 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
             final entryPanel = _EntryPanel(
               team: assigned,
               setNumber: score.setNumber,
+              lineupReady: lineupReady,
               rotation: assignedRotation,
               courtPlayerIds: courtPlayerIds,
               selectedPlayerId: selectedPlayerId,
@@ -201,20 +205,22 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
               onEditLineup: score.isComplete
                   ? null
                   : () => _editLineup(assigned, log, score),
-              onSubstitution: score.isComplete || courtPlayerIds.length != 6
+              onSubstitution: score.isComplete || !lineupReady
                   ? null
                   : () => _recordSubstitution(assigned, courtPlayerIds),
-              onTimeout: score.isComplete || setTimeouts >= 2
+              onTimeout: score.isComplete || !lineupReady || setTimeouts >= 2
                   ? null
                   : () => _recordTimeout(assigned, score),
               onLiberoSwap:
                   score.isComplete ||
+                      !lineupReady ||
                       selectedPlayerId == null ||
                       selectedLiberoId == null ||
                       courtPlayerIds.length != 6
                   ? null
                   : _recordLiberoSwap,
-              onEnter: score.isComplete || inferredWinner == null
+              onEnter:
+                  score.isComplete || !lineupReady || inferredWinner == null
                   ? null
                   : () => _award(inferredWinner),
               compact: compact,
@@ -277,7 +283,7 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
     final existing = log.serviceOrderFor(team.id, score.setNumber);
     final selected = existing.length == 6
         ? [...existing]
-        : team.players.take(6).map((player) => player.id).toList();
+        : List<String>.filled(6, '');
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -325,7 +331,10 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: team.players.length < 6
+              onPressed:
+                  team.players.length < 6 ||
+                      selected.any((id) => id.isEmpty) ||
+                      selected.toSet().length != 6
                   ? null
                   : () => Navigator.pop(dialogContext, true),
               child: const Text('Save lineup'),
@@ -806,6 +815,7 @@ class _EntryPanel extends StatelessWidget {
   const _EntryPanel({
     required this.team,
     required this.setNumber,
+    required this.lineupReady,
     required this.rotation,
     required this.courtPlayerIds,
     required this.selectedPlayerId,
@@ -829,6 +839,7 @@ class _EntryPanel extends StatelessWidget {
   });
   final TournamentTeam team;
   final int setNumber;
+  final bool lineupReady;
   final int rotation;
   final List<String> courtPlayerIds;
   final String? selectedPlayerId;
@@ -884,6 +895,17 @@ class _EntryPanel extends StatelessWidget {
                 ),
               ],
             ),
+            if (!lineupReady && onEditLineup != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Set $setNumber lineup required. Tap R-5 to enable scoring.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             SizedBox(height: compact ? 4 : 10),
             _HalfCourt(
               team: team,
@@ -969,7 +991,9 @@ class _EntryPanel extends StatelessWidget {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: liberos.isEmpty ? null : onLiberoChanged,
+                            onChanged: !lineupReady || liberos.isEmpty
+                                ? null
+                                : onLiberoChanged,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1012,7 +1036,7 @@ class _EntryPanel extends StatelessWidget {
             ),
             SizedBox(height: compact ? 3 : 8),
             _SkillActionGrid(
-              enabled: selectedPlayerId != null,
+              enabled: lineupReady && selectedPlayerId != null,
               onAdd: (skill, grade) => onAdd(skill, grade, team),
               compact: compact,
               denseDesktop: denseSkillButtons,
@@ -1034,11 +1058,13 @@ class _EntryPanel extends StatelessWidget {
                     children: [
                       Expanded(
                         child: FilledButton.tonal(
-                          onPressed: () => onAdd(
-                            Skill.opponentError,
-                            ActionGrade.success,
-                            team,
-                          ),
+                          onPressed: lineupReady
+                              ? () => onAdd(
+                                  Skill.opponentError,
+                                  ActionGrade.success,
+                                  team,
+                                )
+                              : null,
                           style: compactFilledStyle,
                           child: const Text('OPP ERR  •  OP+'),
                         ),
@@ -1046,8 +1072,13 @@ class _EntryPanel extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () =>
-                              onAdd(Skill.teamFault, ActionGrade.error, team),
+                          onPressed: lineupReady
+                              ? () => onAdd(
+                                  Skill.teamFault,
+                                  ActionGrade.error,
+                                  team,
+                                )
+                              : null,
                           style: compactOutlinedStyle,
                           child: const Text('TEAM FAULT  •  T-'),
                         ),
@@ -1066,8 +1097,13 @@ class _EntryPanel extends StatelessWidget {
                 return Row(
                   children: [
                     FilledButton.tonalIcon(
-                      onPressed: () =>
-                          onAdd(Skill.opponentError, ActionGrade.success, team),
+                      onPressed: lineupReady
+                          ? () => onAdd(
+                              Skill.opponentError,
+                              ActionGrade.success,
+                              team,
+                            )
+                          : null,
                       style: tonalStyle,
                       icon: Icon(
                         Icons.add_circle_outline,
@@ -1077,8 +1113,10 @@ class _EntryPanel extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
-                      onPressed: () =>
-                          onAdd(Skill.teamFault, ActionGrade.error, team),
+                      onPressed: lineupReady
+                          ? () =>
+                                onAdd(Skill.teamFault, ActionGrade.error, team)
+                          : null,
                       style: outlinedStyle,
                       icon: Icon(
                         Icons.remove_circle_outline,
@@ -1319,16 +1357,20 @@ class _HalfCourt extends StatelessWidget {
 
   Widget _playerButton(BuildContext context, int position) {
     final playerId = playerIdsByPosition[position - 1];
-    final player = team.players.firstWhere((item) => item.id == playerId);
-    final selected = playerId == selectedPlayerId;
+    final player = team.players
+        .where((item) => item.id == playerId)
+        .firstOrNull;
+    final selected = player != null && playerId == selectedPlayerId;
     Offset? tapPosition;
     return Padding(
       padding: EdgeInsets.all(compact ? 3 : 5),
       child: Semantics(
         button: true,
+        enabled: player != null || onPositionMenuRequested != null,
         selected: selected,
-        label:
-            'Position ${_romanPosition(position)}, number ${player.number}, ${player.name}, ${player.position.name}',
+        label: player == null
+            ? 'Position ${_romanPosition(position)}, empty'
+            : 'Position ${_romanPosition(position)}, number ${player.number}, ${player.name}, ${player.position.name}',
         child: InkWell(
           key: positionKeyPrefix == null
               ? null
@@ -1336,14 +1378,16 @@ class _HalfCourt extends StatelessWidget {
           onTapDown: onPositionMenuRequested == null
               ? null
               : (details) => tapPosition = details.globalPosition,
-          onTap: () {
-            final menuRequested = onPositionMenuRequested;
-            if (menuRequested == null) {
-              onSelected(playerId);
-            } else {
-              menuRequested(position, tapPosition ?? Offset.zero);
-            }
-          },
+          onTap: player == null && onPositionMenuRequested == null
+              ? null
+              : () {
+                  final menuRequested = onPositionMenuRequested;
+                  if (menuRequested == null) {
+                    onSelected(playerId);
+                  } else {
+                    menuRequested(position, tapPosition ?? Offset.zero);
+                  }
+                },
           borderRadius: BorderRadius.circular(14),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
@@ -1364,7 +1408,7 @@ class _HalfCourt extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  '#${player.number}',
+                  player == null ? '—' : '#${player.number}',
                   style:
                       (compact
                               ? Theme.of(context).textTheme.titleMedium
@@ -1374,7 +1418,10 @@ class _HalfCourt extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
-                    player.name,
+                    player?.name ??
+                        (onPositionMenuRequested == null
+                            ? 'Empty'
+                            : 'Tap to select'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -1385,7 +1432,7 @@ class _HalfCourt extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${player.position.name} • ${_romanPosition(position)}',
+                  '${player?.position.name ?? 'Empty'} • ${_romanPosition(position)}',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     fontSize: compact ? 9 : 10,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1536,6 +1583,8 @@ class _R5LineupEditor extends StatelessWidget {
     int position,
     Offset anchor,
   ) async {
+    final players = [...team.players]
+      ..sort((first, second) => first.number.compareTo(second.number));
     final overlay =
         Overlay.of(context).context.findRenderObject()! as RenderBox;
     final selectedPlayerId = await showMenu<String>(
@@ -1548,7 +1597,7 @@ class _R5LineupEditor extends StatelessWidget {
         overlay.size.height - anchor.dy,
       ),
       items: [
-        for (final player in team.players)
+        for (final player in players)
           PopupMenuItem<String>(
             key: ValueKey('lineup-player-${player.id}'),
             value: player.id,

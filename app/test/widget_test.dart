@@ -275,10 +275,125 @@ void main() {
     expect(find.text('Selected: #2 Home 2'), findsOneWidget);
   });
 
+  testWidgets('empty R-5 blocks scoring until six players are saved', (
+    tester,
+  ) async {
+    final log = testLog(deviceId: 'test-device');
+    final game = testGame(logs: [log]);
+    final data = AppData(
+      deviceId: 'test-device',
+      tournaments: [
+        testTournament(games: [game]),
+      ],
+    );
+    final repository = MemoryAppRepository(data);
+    await tester.binding.setSurfaceSize(const Size(430, 1000));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appRepositoryProvider.overrideWithValue(repository),
+          initialAppDataProvider.overrideWithValue(data),
+        ],
+        child: const MaterialApp(
+          home: TrackerPage(tournamentId: 'tournament', gameId: 'game'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Set 1 lineup required. Tap R-5 to enable scoring.'),
+      findsOneWidget,
+    );
+    expect(find.text('Empty'), findsNWidgets(6));
+    expect(find.text('V1'), findsNothing);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find
+                .ancestor(
+                  of: find.text('ATT').first,
+                  matching: find.byType(OutlinedButton),
+                )
+                .first,
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find
+                .ancestor(
+                  of: find.text('Enter'),
+                  matching: find.byType(FilledButton),
+                )
+                .first,
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.tap(find.text('R-5 • Set 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tap to select'), findsNWidgets(6));
+    expect(
+      tester
+          .widget<FilledButton>(
+            find
+                .ancestor(
+                  of: find.text('Save lineup'),
+                  matching: find.byType(FilledButton),
+                )
+                .first,
+          )
+          .onPressed,
+      isNull,
+    );
+    for (var position = 1; position <= 6; position++) {
+      await tester.tap(find.byKey(ValueKey('lineup-position-$position')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(ValueKey('lineup-player-home-${position - 1}')),
+      );
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Save lineup'));
+    await tester.pumpAndSettle();
+
+    final savedLog =
+        (await repository.load()).tournaments.single.games.single.logs.single;
+    expect(
+      savedLog.lineups.single.playerIds,
+      homeTeam.players.map((p) => p.id),
+    );
+    expect(
+      find.text('Set 1 lineup required. Tap R-5 to enable scoring.'),
+      findsNothing,
+    );
+    expect(find.text('V1'), findsOneWidget);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find
+                .ancestor(
+                  of: find.text('ATT').first,
+                  matching: find.byType(OutlinedButton),
+                )
+                .first,
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
   testWidgets('R-5 lineup opens a player dropdown from each court position', (
     tester,
   ) async {
     final now = DateTime.utc(2026, 10, 2);
+    final lineupTeam = homeTeam.copyWith(
+      players: homeTeam.players.reversed.toList(),
+    );
     final initialOrder = homeTeam.players
         .take(6)
         .map((player) => player.id)
@@ -316,7 +431,7 @@ void main() {
       startsOn: now,
       endsOn: now,
       createdAt: now,
-      teams: [homeTeam, awayTeam],
+      teams: [lineupTeam, awayTeam],
       games: [game],
     );
     final data = AppData(deviceId: 'test-device', tournaments: [tournament]);
@@ -344,6 +459,12 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('lineup-position-1')));
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<PopupMenuItem<String>>(find.byType(PopupMenuItem<String>))
+          .map((item) => item.value),
+      homeTeam.players.map((player) => player.id),
+    );
     expect(find.byKey(const ValueKey('lineup-player-home-1')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('lineup-player-home-1')));
     await tester.pumpAndSettle();
