@@ -911,6 +911,49 @@ class AppController extends Notifier<AppData> {
     return incomingPlayerId!;
   }
 
+  Future<void> rotateLineupManually(String tournamentId, String gameId) async {
+    await _updateGame(tournamentId, gameId, (tournament, game) {
+      final index = game.logs.indexWhere(
+        (log) => log.deviceId == state.deviceId,
+      );
+      if (index < 0) {
+        throw StateError('Start a scorer log on this device first.');
+      }
+      final log = game.logs[index];
+      final score = const ScoringEngine().score(
+        game,
+        log,
+        tournament.rulesFor(game),
+      );
+      if (score.isComplete) throw StateError('The match is already complete.');
+      if (log.lineupFor(log.assignedTeamId, score.setNumber) == null) {
+        throw StateError('Save the R-5 lineup for this set first.');
+      }
+      final currentRotation = log.assignedTeamId == game.homeTeamId
+          ? score.homeRotation
+          : score.awayRotation;
+      final now = DateTime.now();
+      final logs = [...game.logs];
+      logs[index] = log.copyWith(
+        updatedAt: now,
+        rotationAdjustments: [
+          ...log.rotationAdjustments,
+          RotationAdjustment(
+            id: _uuid.v4(),
+            teamId: log.assignedTeamId,
+            setNumber: score.setNumber,
+            afterRallySequence: log.rallies
+                .where((rally) => rally.setNumber == score.setNumber)
+                .length,
+            rotation: currentRotation % 6 + 1,
+            recordedAt: now,
+          ),
+        ],
+      );
+      return game.copyWith(logs: logs);
+    });
+  }
+
   Future<void> recordTimeout(String tournamentId, String gameId) async {
     await _updateGame(tournamentId, gameId, (tournament, game) {
       final index = game.logs.indexWhere(

@@ -273,6 +273,13 @@ void main() {
     expect(find.text('HOM point  •  2-1'), findsOneWidget);
     expect(find.text('V2'), findsOneWidget);
     expect(find.text('Selected: #2 Home 2'), findsOneWidget);
+    await tester.tap(find.byTooltip('Manually rotate lineup'));
+    await tester.pumpAndSettle();
+    expect(find.text('Manually rotate lineup?'), findsOneWidget);
+    await tester.tap(find.text('Rotate'));
+    await tester.pumpAndSettle();
+    expect(find.text('HOM manually rotated to 3'), findsOneWidget);
+    expect(find.text('Selected: #3 Home 3'), findsOneWidget);
   });
 
   testWidgets('empty R-5 blocks scoring until six players are saved', (

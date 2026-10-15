@@ -527,6 +527,43 @@ class TeamTimeout {
   );
 }
 
+class RotationAdjustment {
+  const RotationAdjustment({
+    required this.id,
+    required this.teamId,
+    required this.setNumber,
+    required this.afterRallySequence,
+    required this.rotation,
+    required this.recordedAt,
+  });
+
+  final String id;
+  final String teamId;
+  final int setNumber;
+  final int afterRallySequence;
+  final int rotation;
+  final DateTime recordedAt;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'teamId': teamId,
+    'setNumber': setNumber,
+    'afterRallySequence': afterRallySequence,
+    'rotation': rotation,
+    'recordedAt': recordedAt.toUtc().toIso8601String(),
+  };
+
+  factory RotationAdjustment.fromJson(Map<String, Object?> json) =>
+      RotationAdjustment(
+        id: json['id']! as String,
+        teamId: json['teamId']! as String,
+        setNumber: (json['setNumber'] as num).toInt(),
+        afterRallySequence: (json['afterRallySequence'] as num).toInt(),
+        rotation: (json['rotation'] as num).toInt(),
+        recordedAt: DateTime.parse(json['recordedAt']! as String),
+      );
+}
+
 class ScorerLog {
   const ScorerLog({
     required this.id,
@@ -539,6 +576,7 @@ class ScorerLog {
     this.lineups = const [],
     this.substitutions = const [],
     this.timeouts = const [],
+    this.rotationAdjustments = const [],
     this.rallies = const [],
     this.corrections = const [],
   });
@@ -553,6 +591,7 @@ class ScorerLog {
   final List<LineupSnapshot> lineups;
   final List<Substitution> substitutions;
   final List<TeamTimeout> timeouts;
+  final List<RotationAdjustment> rotationAdjustments;
   final List<Rally> rallies;
   final List<Correction> corrections;
 
@@ -563,6 +602,7 @@ class ScorerLog {
     List<LineupSnapshot>? lineups,
     List<Substitution>? substitutions,
     List<TeamTimeout>? timeouts,
+    List<RotationAdjustment>? rotationAdjustments,
   }) => ScorerLog(
     id: id,
     gameId: gameId,
@@ -574,6 +614,7 @@ class ScorerLog {
     lineups: lineups ?? this.lineups,
     substitutions: substitutions ?? this.substitutions,
     timeouts: timeouts ?? this.timeouts,
+    rotationAdjustments: rotationAdjustments ?? this.rotationAdjustments,
     rallies: rallies ?? this.rallies,
     corrections: corrections ?? this.corrections,
   );
@@ -589,6 +630,9 @@ class ScorerLog {
     'lineups': lineups.map((lineup) => lineup.toJson()).toList(),
     'substitutions': substitutions.map((item) => item.toJson()).toList(),
     'timeouts': timeouts.map((item) => item.toJson()).toList(),
+    'rotationAdjustments': rotationAdjustments
+        .map((item) => item.toJson())
+        .toList(),
     'rallies': rallies.map((rally) => rally.toJson()).toList(),
     'corrections': corrections.map((item) => item.toJson()).toList(),
   };
@@ -618,6 +662,14 @@ class ScorerLog {
           (item) => TeamTimeout.fromJson((item as Map).cast<String, Object?>()),
         )
         .toList(),
+    rotationAdjustments:
+        (json['rotationAdjustments'] as List<Object?>? ?? const [])
+            .map(
+              (item) => RotationAdjustment.fromJson(
+                (item as Map).cast<String, Object?>(),
+              ),
+            )
+            .toList(),
     rallies: (json['rallies'] as List<Object?>? ?? const [])
         .map((item) => Rally.fromJson((item as Map).cast<String, Object?>()))
         .toList(),

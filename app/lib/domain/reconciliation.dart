@@ -155,6 +155,10 @@ class ReconciliationService {
         for (final item in result.primary.timeouts) item.id: item,
         for (final item in result.imported.timeouts) item.id: item,
       }.values.toList(),
+      rotationAdjustments: {
+        for (final item in result.primary.rotationAdjustments) item.id: item,
+        for (final item in result.imported.rotationAdjustments) item.id: item,
+      }.values.toList(),
       rallies: merged,
       corrections: [
         ...result.primary.corrections,

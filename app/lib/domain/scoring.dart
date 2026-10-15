@@ -105,6 +105,21 @@ class ScoringEngine {
       }
     }
 
+    final currentRallyCount = log.rallies
+        .where((rally) => rally.setNumber == setNumber)
+        .length;
+    for (final adjustment in log.rotationAdjustments) {
+      if (adjustment.setNumber != setNumber ||
+          adjustment.afterRallySequence != currentRallyCount) {
+        continue;
+      }
+      if (adjustment.teamId == game.homeTeamId) {
+        homeRotation = adjustment.rotation;
+      } else if (adjustment.teamId == game.awayTeamId) {
+        awayRotation = adjustment.rotation;
+      }
+    }
+
     return MatchScore(
       setNumber: setNumber,
       homePoints: homePoints,

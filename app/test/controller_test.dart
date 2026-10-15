@@ -4,6 +4,7 @@ import 'package:vc_sets/application/providers.dart';
 import 'package:vc_sets/data/repository.dart';
 import 'package:vc_sets/domain/models.dart';
 import 'package:vc_sets/domain/packages.dart';
+import 'package:vc_sets/domain/scoring.dart';
 
 import 'test_fixtures.dart';
 
@@ -742,6 +743,78 @@ void main() {
     log = (await repository.load()).tournaments.single.games.single.logs.single;
     expect(log.rallies.map((rally) => rally.setNumber), [1, 2]);
   });
+
+  test(
+    'manual rotation persists and normal side-out rotation still applies',
+    () async {
+      final game = testGame();
+      final initial = AppData(
+        deviceId: 'device',
+        tournaments: [
+          testTournament(games: [game]),
+        ],
+      );
+      final repository = MemoryAppRepository(initial);
+      final container = ProviderContainer(
+        overrides: [
+          appRepositoryProvider.overrideWithValue(repository),
+          initialAppDataProvider.overrideWithValue(initial),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(appControllerProvider.notifier);
+      await controller.startScorerLog(
+        'tournament',
+        'game',
+        assignedTeamId: homeTeam.id,
+        initialServingTeamId: homeTeam.id,
+      );
+      await expectLater(
+        controller.rotateLineupManually('tournament', 'game'),
+        throwsStateError,
+      );
+      await controller.setLineup(
+        'tournament',
+        'game',
+        setNumber: 1,
+        playerIds: homeTeam.players.map((player) => player.id).toList(),
+      );
+      await controller.rotateLineupManually('tournament', 'game');
+      var saved = (await repository.load()).tournaments.single.games.single;
+      var log = ScorerLog.fromJson(saved.logs.single.toJson());
+      var score = const ScoringEngine().score(saved, log, const MatchRules());
+      expect(score.homePoints, 0);
+      expect(score.homeRotation, 2);
+      expect(
+        log.courtOrderFor(homeTeam.id, 1, score.homeRotation).last,
+        homeTeam.players.first.id,
+      );
+
+      await controller.awardRally(
+        'tournament',
+        'game',
+        winnerTeamId: awayTeam.id,
+        actions: const [],
+      );
+      saved = (await repository.load()).tournaments.single.games.single;
+      log = saved.logs.single;
+      score = const ScoringEngine().score(saved, log, const MatchRules());
+      expect(score.homeRotation, 2);
+      expect(score.awayRotation, 2);
+      await controller.awardRally(
+        'tournament',
+        'game',
+        winnerTeamId: homeTeam.id,
+        actions: const [],
+      );
+      saved = (await repository.load()).tournaments.single.games.single;
+      log = saved.logs.single;
+      score = const ScoringEngine().score(saved, log, const MatchRules());
+      expect(score.homeRotation, 3);
+      expect(score.homePoints, 1);
+      expect(score.awayPoints, 1);
+    },
+  );
 
   test('quick libero swaps replace and restore the selected player', () async {
     const benchPlayer = Player(

@@ -219,6 +219,9 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
                       courtPlayerIds.length != 6
                   ? null
                   : _recordLiberoSwap,
+              onManualRotate: score.isComplete || !lineupReady
+                  ? null
+                  : () => _rotateLineupManually(assignedRotation),
               onEnter:
                   score.isComplete || !lineupReady || inferredWinner == null
                   ? null
@@ -570,6 +573,45 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
           .undoLastRally(widget.tournamentId, widget.gameId, reason.text);
     }
   }
+
+  Future<void> _rotateLineupManually(int currentRotation) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Manually rotate lineup?'),
+        content: Text(
+          'Move from rotation $currentRotation to '
+          '${currentRotation % 6 + 1}? This changes court positions '
+          'without awarding a point. Pending actions will be cleared.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Rotate'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true) return;
+    try {
+      await ref
+          .read(appControllerProvider.notifier)
+          .rotateLineupManually(widget.tournamentId, widget.gameId);
+      if (mounted) {
+        setState(() {
+          pending.clear();
+          _automaticServeActionId = null;
+          _automaticServeKey = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) showError(context, error);
+    }
+  }
 }
 
 class _AssignmentPage extends StatefulWidget {
@@ -833,6 +875,7 @@ class _EntryPanel extends StatelessWidget {
     required this.onSubstitution,
     required this.onTimeout,
     required this.onLiberoSwap,
+    required this.onManualRotate,
     required this.onEnter,
     required this.compact,
     required this.denseSkillButtons,
@@ -857,6 +900,7 @@ class _EntryPanel extends StatelessWidget {
   final VoidCallback? onSubstitution;
   final VoidCallback? onTimeout;
   final VoidCallback? onLiberoSwap;
+  final VoidCallback? onManualRotate;
   final VoidCallback? onEnter;
   final bool compact;
   final bool denseSkillButtons;
@@ -1018,8 +1062,20 @@ class _EntryPanel extends StatelessWidget {
                         const SizedBox(width: 8),
                         Chip(
                           padding: tight ? EdgeInsets.zero : null,
+                          labelPadding: tight ? EdgeInsets.zero : null,
                           visualDensity: tight ? VisualDensity.compact : null,
                           label: Text('Rotation $rotation'),
+                        ),
+                        IconButton(
+                          tooltip: 'Manually rotate lineup',
+                          onPressed: onManualRotate,
+                          icon: const Icon(Icons.rotate_right),
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
                         ),
                       ],
                     ),
@@ -1466,6 +1522,8 @@ class _Timeline extends StatelessWidget {
       for (final substitution in log.substitutions)
         _TimelineEvent.substitution(substitution),
       for (final timeout in log.timeouts) _TimelineEvent.timeout(timeout),
+      for (final adjustment in log.rotationAdjustments)
+        _TimelineEvent.rotation(adjustment),
     ]..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1540,6 +1598,19 @@ class _Timeline extends StatelessWidget {
         ),
         subtitle: Text(
           '${substitution.isLiberoReplacement ? 'Libero replacement • ' : ''}Set ${substitution.setNumber} • ${substitution.homeScore}-${substitution.awayScore}',
+        ),
+      );
+    }
+    final adjustment = event.rotationAdjustment;
+    if (adjustment != null) {
+      return ListTile(
+        dense: true,
+        leading: const CircleAvatar(child: Icon(Icons.rotate_right, size: 18)),
+        title: Text(
+          '${trackedTeam.shortCode} manually rotated to ${adjustment.rotation}',
+        ),
+        subtitle: Text(
+          'Set ${adjustment.setNumber} • after rally ${adjustment.afterRallySequence}',
         ),
       );
     }
@@ -1639,6 +1710,7 @@ class _TimelineEvent {
     this.rally,
     this.substitution,
     this.timeout,
+    this.rotationAdjustment,
   });
 
   factory _TimelineEvent.rally(Rally rally) =>
@@ -1650,11 +1722,17 @@ class _TimelineEvent {
       );
   factory _TimelineEvent.timeout(TeamTimeout timeout) =>
       _TimelineEvent._(recordedAt: timeout.recordedAt, timeout: timeout);
+  factory _TimelineEvent.rotation(RotationAdjustment adjustment) =>
+      _TimelineEvent._(
+        recordedAt: adjustment.recordedAt,
+        rotationAdjustment: adjustment,
+      );
 
   final DateTime recordedAt;
   final Rally? rally;
   final Substitution? substitution;
   final TeamTimeout? timeout;
+  final RotationAdjustment? rotationAdjustment;
 }
 
 extension _FirstOrNull<T> on Iterable<T> {
