@@ -199,11 +199,25 @@ void main() {
     expect(scoreboard.dy, lessThan(timeline.dy));
     expect(playerActions.dy, lessThan(160));
     expect(tester.getSize(desktopAttButton).height, lessThanOrEqualTo(34));
+    expect(find.byKey(const ValueKey('timeline-draft-header')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('timeline-draft-skill-0')),
+        matching: find.text('V1'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('EXC').first);
     await tester.pump();
     expect(find.text('V1'), findsNothing);
-    expect(find.text('V1+'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('timeline-draft-skill-0')),
+        matching: find.text('V1+'),
+      ),
+      findsOneWidget,
+    );
     expect(
       tester
           .widget<FilledButton>(
@@ -221,11 +235,12 @@ void main() {
     await tester.tap(find.text('Enter'));
     await tester.pumpAndSettle();
     expect(find.text('HOM point  •  1-0'), findsOneWidget);
-    expect(find.text('V1'), findsOneWidget);
+    expect(find.text('Set 1 • V1+'), findsOneWidget);
+    expect(find.text('V1'), findsNWidgets(2));
 
     await tester.tap(find.text('EXC').first);
     await tester.pump();
-    expect(find.text('V1+'), findsOneWidget);
+    expect(find.text('V1+'), findsNWidgets(2));
 
     await tester.ensureVisible(find.text('OPP ERR  •  OP+'));
     await tester.pumpAndSettle();
@@ -234,9 +249,32 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('TEAM FAULT  •  T-'));
     await tester.pump();
-    expect(find.text('V1+'), findsOneWidget);
-    expect(find.text('OP+'), findsOneWidget);
-    expect(find.text('T-'), findsOneWidget);
+    for (final (index, skill) in ['T-', 'OP+', 'V1+'].indexed) {
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey('timeline-draft-skill-$index')),
+          matching: find.text(skill),
+        ),
+        findsOneWidget,
+      );
+    }
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('timeline-draft-skill-0')),
+        matching: find.byIcon(Icons.close),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('T-'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('timeline-draft-skill-0')),
+        matching: find.text('OP+'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('TEAM FAULT  •  T-'));
+    await tester.pump();
 
     for (final size in [const Size(810, 1080), const Size(1080, 810)]) {
       await tester.binding.setSurfaceSize(size);
@@ -265,13 +303,14 @@ void main() {
     expect(find.text('AWY point  •  1-1'), findsOneWidget);
     expect(find.text('T-'), findsNothing);
     expect(find.text('This rally'), findsNothing);
+    expect(find.byKey(const ValueKey('timeline-draft-header')), findsNothing);
 
     await tester.tap(find.text('OPP ERR  •  OP+'));
     await tester.pump();
     await tester.tap(find.text('Enter'));
     await tester.pumpAndSettle();
     expect(find.text('HOM point  •  2-1'), findsOneWidget);
-    expect(find.text('V2'), findsOneWidget);
+    expect(find.text('V2'), findsNWidgets(2));
     expect(find.text('Selected: #2 Home 2'), findsOneWidget);
     await tester.tap(find.byTooltip('Manually rotate lineup'));
     await tester.pumpAndSettle();

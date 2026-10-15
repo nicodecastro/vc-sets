@@ -200,7 +200,7 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
               onLiberoChanged: (value) =>
                   setState(() => selectedLiberoId = value),
               onAdd: _addAction,
-              onRemove: (action) => setState(() => pending.remove(action)),
+              onRemove: _removePendingAction,
               onUndo: log.rallies.isEmpty ? null : _undo,
               onEditLineup: score.isComplete
                   ? null
@@ -237,6 +237,8 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
             );
             final timeline = _Timeline(
               log: log,
+              pending: pending,
+              onRemove: _removePendingAction,
               home: home,
               away: away,
               trackedTeam: assigned,
@@ -529,6 +531,9 @@ class _TrackerPageState extends ConsumerState<TrackerPage> {
         ..addAll(composed);
     });
   }
+
+  void _removePendingAction(TeamAction action) =>
+      setState(() => pending.remove(action));
 
   Future<void> _award(String teamId) async {
     try {
@@ -1512,17 +1517,23 @@ class _HalfCourt extends StatelessWidget {
 class _Timeline extends StatelessWidget {
   const _Timeline({
     required this.log,
+    required this.pending,
+    required this.onRemove,
     required this.home,
     required this.away,
     required this.trackedTeam,
   });
   final ScorerLog log;
+  final List<TeamAction> pending;
+  final ValueChanged<TeamAction> onRemove;
   final TournamentTeam home;
   final TournamentTeam away;
   final TournamentTeam trackedTeam;
 
   @override
   Widget build(BuildContext context) {
+    final draftActions = pending.reversed.toList();
+    final draftCount = draftActions.isEmpty ? 0 : draftActions.length + 1;
     final events = <_TimelineEvent>[
       for (final rally in log.rallies) _TimelineEvent.rally(rally),
       for (final substitution in log.substitutions)
@@ -1543,12 +1554,44 @@ class _Timeline extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: events.isEmpty
+          child: events.isEmpty && draftActions.isEmpty
               ? const Center(child: Text('The first event will appear here.'))
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: events.length,
-                  itemBuilder: (context, index) => _eventTile(events[index]),
+                  itemCount: draftCount + events.length,
+                  itemBuilder: (context, index) {
+                    if (draftCount > 0) {
+                      if (index == 0) {
+                        return ListTile(
+                          key: const ValueKey('timeline-draft-header'),
+                          dense: true,
+                          leading: const Icon(Icons.edit_note),
+                          title: const Text('Draft rally'),
+                          subtitle: const Text('Not scored yet'),
+                          tileColor: Theme.of(context)
+                              .colorScheme
+                              .secondaryContainer,
+                        );
+                      }
+                      if (index < draftCount) {
+                        final action = draftActions[index - 1];
+                        return ListTile(
+                          key: ValueKey('timeline-draft-skill-${index - 1}'),
+                          dense: true,
+                          contentPadding: const EdgeInsets.only(left: 56),
+                          title: Align(
+                            alignment: Alignment.centerLeft,
+                            child: InputChip(
+                              label: Text(action.notation(trackedTeam)),
+                              deleteIcon: const Icon(Icons.close, size: 18),
+                              onDeleted: () => onRemove(action),
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                    return _eventTile(events[index - draftCount]);
+                  },
                 ),
         ),
       ],
