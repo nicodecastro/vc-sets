@@ -159,7 +159,7 @@ void main() {
     const first = Player(
       id: 'p1',
       number: 2,
-      name: 'Ana Santos',
+      name: 'De la Cruz, Ana Marie',
       position: PlayerPosition.S,
     );
     const second = Player(
@@ -266,7 +266,7 @@ void main() {
       'OP+',
       'T-',
     ]);
-    expect(ana.lastName, 'Santos');
+    expect(ana.lastName, 'De la Cruz');
     expect(ana.counts['S'], 1);
     expect(ana.counts['S+'], 1);
     expect(ana.counts['V-'], 1);
@@ -288,7 +288,7 @@ void main() {
       csv.split('\r\n').first,
       'Team,Last name,Number,${playerStatColumns.join(',')},Games played,Sets played,Games won',
     );
-    expect(csv, contains('"${team.name}","Santos",2,'));
+    expect(csv, contains('"${team.name}","De la Cruz",2,'));
     expect(csv, contains(',1,1,1'));
   });
 }

@@ -357,6 +357,8 @@ class StatisticsService {
   }
 
   String _lastName(String name) {
+    final comma = name.indexOf(',');
+    if (comma > 0) return name.substring(0, comma).trim();
     final parts = name.trim().split(RegExp(r'\s+'));
     return parts.isEmpty ? name : parts.last;
   }
