@@ -69,6 +69,18 @@ class PlayerStatRow {
   final int gamesWon;
 }
 
+class GamePlayerStatRow {
+  const GamePlayerStatRow({
+    required this.player,
+    required this.setsPlayed,
+    required this.counts,
+  });
+
+  final Player player;
+  final int setsPlayed;
+  final Map<String, int> counts;
+}
+
 class StandingRow {
   const StandingRow({
     required this.team,
@@ -100,6 +112,76 @@ class StandingRow {
 
 class StatisticsService {
   const StatisticsService();
+
+  List<GamePlayerStatRow> gamePlayerStats(
+    Game game,
+    TournamentTeam team, {
+    int? setNumber,
+  }) {
+    final log = game.officialLog;
+    if (game.status != GameStatus.finalized || log == null) return const [];
+    final rallies = log.rallies
+        .where((rally) => setNumber == null || rally.setNumber == setNumber)
+        .toList();
+    final setNumbers = rallies.map((rally) => rally.setNumber).toSet();
+    final actions = rallies.expand((rally) => rally.actions).toList();
+    final players = [...team.players]
+      ..sort((first, second) => first.number.compareTo(second.number));
+    final rows = <GamePlayerStatRow>[];
+    for (final player in players) {
+      final setsPlayed = setNumbers
+          .where((number) => _playedSet(log, team.id, player.id, number))
+          .length;
+      if (setsPlayed == 0) continue;
+      final counts = <String, int>{};
+      for (final action in actions.where(
+        (action) => action.teamId == team.id && action.playerId == player.id,
+      )) {
+        final column = _playerStatColumn(action);
+        if (column != null) counts[column] = (counts[column] ?? 0) + 1;
+      }
+      rows.add(
+        GamePlayerStatRow(
+          player: player,
+          setsPlayed: setsPlayed,
+          counts: counts,
+        ),
+      );
+    }
+    return rows;
+  }
+
+  int gameTeamActionCount(
+    Game game,
+    String teamId,
+    Skill skill, {
+    int? setNumber,
+  }) => game.status != GameStatus.finalized || game.officialLog == null
+      ? 0
+      : game.officialLog!.rallies
+            .where((rally) => setNumber == null || rally.setNumber == setNumber)
+            .expand((rally) => rally.actions)
+            .where((action) => action.teamId == teamId && action.skill == skill)
+            .length;
+
+  Map<String, int> gameTeamSkillCounts(
+    Game game,
+    String teamId, {
+    int? setNumber,
+  }) {
+    final log = game.officialLog;
+    if (game.status != GameStatus.finalized || log == null) return const {};
+    final counts = <String, int>{};
+    for (final action
+        in log.rallies
+            .where((rally) => setNumber == null || rally.setNumber == setNumber)
+            .expand((rally) => rally.actions)
+            .where((action) => action.teamId == teamId)) {
+      final column = _playerStatColumn(action);
+      if (column != null) counts[column] = (counts[column] ?? 0) + 1;
+    }
+    return counts;
+  }
 
   List<PlayerStatRow> playerStatsSummary(Tournament tournament) {
     final finalizedGames = tournament.games

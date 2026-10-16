@@ -8,6 +8,7 @@ import '../../application/providers.dart';
 import '../../domain/models.dart';
 import '../../domain/reconciliation.dart';
 import '../../domain/scoring.dart';
+import '../../domain/statistics.dart';
 import '../widgets/common.dart';
 
 String _scoreLabel(Rally? rally) =>
@@ -943,6 +944,10 @@ class _FinalizedReconciliationSummary extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
+            if (game.officialLog != null) ...[
+              _GamePlayerStatsCard(tournament: tournament, game: game),
+              const SizedBox(height: 12),
+            ],
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(18),
@@ -1018,6 +1023,170 @@ class _FinalizedReconciliationSummary extends StatelessWidget {
                   ),
                 ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GamePlayerStatsCard extends StatefulWidget {
+  const _GamePlayerStatsCard({required this.tournament, required this.game});
+
+  final Tournament tournament;
+  final Game game;
+
+  @override
+  State<_GamePlayerStatsCard> createState() => _GamePlayerStatsCardState();
+}
+
+class _GamePlayerStatsCardState extends State<_GamePlayerStatsCard> {
+  String? selectedTeamId;
+  int? selectedSetNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    final game = widget.game;
+    final home = widget.tournament.team(game.homeTeamId);
+    final away = widget.tournament.team(game.awayTeamId);
+    final teamId = selectedTeamId == away.id ? away.id : home.id;
+    final team = teamId == home.id ? home : away;
+    final setNumbers =
+        game.officialLog!.rallies
+            .map((rally) => rally.setNumber)
+            .toSet()
+            .toList()
+          ..sort();
+    final setNumber = setNumbers.contains(selectedSetNumber)
+        ? selectedSetNumber
+        : null;
+    final stats = const StatisticsService();
+    final players = stats.gamePlayerStats(game, team, setNumber: setNumber);
+    final teamSkills = stats.gameTeamSkillCounts(
+      game,
+      team.id,
+      setNumber: setNumber,
+    );
+    final opponentErrors = stats.gameTeamActionCount(
+      game,
+      team.id,
+      Skill.opponentError,
+      setNumber: setNumber,
+    );
+    final teamFaults = stats.gameTeamActionCount(
+      game,
+      team.id,
+      Skill.teamFault,
+      setNumber: setNumber,
+    );
+    const skills = <String, String>{
+      'Set': 'S',
+      'Serve': 'V',
+      'Dig': 'D',
+      'Reception': 'R',
+      'Attack': 'A',
+      'Block': 'B',
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Player stats',
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Skill counts are ATT / EXC / ERR. OP+ and T− are team totals.',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ChoiceChip(
+                  label: Text(home.shortCode),
+                  selected: teamId == home.id,
+                  onSelected: (_) => setState(() => selectedTeamId = home.id),
+                ),
+                ChoiceChip(
+                  label: Text(away.shortCode),
+                  selected: teamId == away.id,
+                  onSelected: (_) => setState(() => selectedTeamId = away.id),
+                ),
+                DropdownButton<int?>(
+                  value: setNumber,
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('All sets'),
+                    ),
+                    for (final number in setNumbers)
+                      DropdownMenuItem<int?>(
+                        value: number,
+                        child: Text('Set $number'),
+                      ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => selectedSetNumber = value),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text('Team totals: OP+ $opponentErrors  •  T− $teamFaults'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final entry in skills.entries)
+                  Chip(
+                    label: Text(
+                      '${entry.key} ${teamSkills[entry.value] ?? 0} / ${teamSkills['${entry.value}+'] ?? 0} / ${teamSkills['${entry.value}-'] ?? 0}',
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (players.isEmpty)
+              const Text(
+                'No player participation was recorded for this team and set.',
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columnSpacing: 18,
+                  horizontalMargin: 8,
+                  columns: [
+                    const DataColumn(label: Text('#')),
+                    const DataColumn(label: Text('Player')),
+                    const DataColumn(label: Text('Sets')),
+                    for (final skill in skills.keys)
+                      DataColumn(label: Text(skill)),
+                  ],
+                  rows: [
+                    for (final row in players)
+                      DataRow(
+                        cells: [
+                          DataCell(Text('${row.player.number}')),
+                          DataCell(Text(row.player.name)),
+                          DataCell(Text('${row.setsPlayed}')),
+                          for (final code in skills.values)
+                            DataCell(
+                              Text(
+                                '${row.counts[code] ?? 0} / ${row.counts['$code+'] ?? 0} / ${row.counts['$code-'] ?? 0}',
+                              ),
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

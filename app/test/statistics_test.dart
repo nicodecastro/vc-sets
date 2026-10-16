@@ -7,6 +7,132 @@ import 'package:vc_sets/domain/statistics.dart';
 import 'test_fixtures.dart';
 
 void main() {
+  test('game stats use only the official log and honor the set filter', () {
+    final now = DateTime.utc(2026, 10, 2);
+    final home = homeTeam.copyWith(players: homeTeam.players.reversed.toList());
+    TeamAction action(
+      String id,
+      String teamId,
+      String? playerId,
+      Skill skill,
+      ActionGrade grade,
+    ) => TeamAction(
+      id: id,
+      teamId: teamId,
+      playerId: playerId,
+      skill: skill,
+      grade: grade,
+      recordedAt: now,
+    );
+    final official =
+        testLog(
+          id: 'official',
+          rallies: [
+            Rally(
+              id: 'set-one',
+              setNumber: 1,
+              sequence: 1,
+              winnerTeamId: home.id,
+              homeScore: 1,
+              awayScore: 0,
+              homeRotation: 1,
+              awayRotation: 1,
+              servingTeamId: home.id,
+              recordedAt: now,
+              actions: [
+                action(
+                  'serve',
+                  home.id,
+                  homeTeam.players.first.id,
+                  Skill.serve,
+                  ActionGrade.success,
+                ),
+                action(
+                  'op',
+                  home.id,
+                  null,
+                  Skill.opponentError,
+                  ActionGrade.success,
+                ),
+              ],
+            ),
+            Rally(
+              id: 'set-two',
+              setNumber: 2,
+              sequence: 1,
+              winnerTeamId: awayTeam.id,
+              homeScore: 0,
+              awayScore: 1,
+              homeRotation: 1,
+              awayRotation: 1,
+              servingTeamId: awayTeam.id,
+              recordedAt: now,
+              actions: [
+                action(
+                  'attack',
+                  home.id,
+                  homeTeam.players.first.id,
+                  Skill.attack,
+                  ActionGrade.error,
+                ),
+                action(
+                  'fault',
+                  home.id,
+                  null,
+                  Skill.teamFault,
+                  ActionGrade.error,
+                ),
+              ],
+            ),
+          ],
+        ).copyWith(
+          lineups: [
+            for (final setNumber in [1, 2])
+              LineupSnapshot(
+                teamId: home.id,
+                playerIds: homeTeam.players.map((player) => player.id).toList(),
+                setNumber: setNumber,
+              ),
+          ],
+        );
+    final game = testGame(officialLog: official);
+    const stats = StatisticsService();
+    final all = stats.gamePlayerStats(game, home);
+    expect(all.first.player.number, 1);
+    expect(all.first.setsPlayed, 2);
+    expect(all.first.counts['V+'], 1);
+    expect(all.first.counts['A-'], 1);
+    expect(all.first.counts['OP+'], isNull);
+    expect(all[1].setsPlayed, 2);
+    expect(all[1].counts, isEmpty);
+
+    final setTwo = stats.gamePlayerStats(game, home, setNumber: 2);
+    expect(setTwo.first.setsPlayed, 1);
+    expect(setTwo.first.counts['V+'], isNull);
+    expect(setTwo.first.counts['A-'], 1);
+    expect(stats.gameTeamActionCount(game, home.id, Skill.opponentError), 1);
+    expect(stats.gameTeamSkillCounts(game, home.id)['V+'], 1);
+    expect(stats.gameTeamSkillCounts(game, home.id)['A-'], 1);
+    expect(
+      stats.gameTeamSkillCounts(game, home.id, setNumber: 2)['V+'],
+      isNull,
+    );
+    expect(
+      stats.gameTeamActionCount(game, home.id, Skill.teamFault, setNumber: 2),
+      1,
+    );
+    expect(
+      stats.gameTeamActionCount(
+        game,
+        home.id,
+        Skill.opponentError,
+        setNumber: 2,
+      ),
+      0,
+    );
+    expect(stats.gamePlayerStats(testGame(logs: [official]), home), isEmpty);
+  });
+
   test('finalized match drives standings and player totals', () {
     const engine = ScoringEngine();
     var log = testLog();

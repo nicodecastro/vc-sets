@@ -843,6 +843,191 @@ void main() {
     expect(find.byTooltip('Reconcile'), findsOneWidget);
   });
 
+  testWidgets('finalized summary filters player stats by team and set', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 10, 2, 12);
+    TeamAction action(
+      String id,
+      String teamId,
+      String? playerId,
+      Skill skill,
+      ActionGrade grade,
+    ) => TeamAction(
+      id: id,
+      teamId: teamId,
+      playerId: playerId,
+      skill: skill,
+      grade: grade,
+      recordedAt: now,
+    );
+    final official =
+        testLog(
+          id: 'official',
+          rallies: [
+            Rally(
+              id: 'set-one',
+              setNumber: 1,
+              sequence: 1,
+              winnerTeamId: homeTeam.id,
+              homeScore: 1,
+              awayScore: 0,
+              homeRotation: 1,
+              awayRotation: 1,
+              servingTeamId: homeTeam.id,
+              recordedAt: now,
+              actions: [
+                action(
+                  'serve',
+                  homeTeam.id,
+                  homeTeam.players.first.id,
+                  Skill.serve,
+                  ActionGrade.success,
+                ),
+                action(
+                  'receive',
+                  awayTeam.id,
+                  awayTeam.players.first.id,
+                  Skill.reception,
+                  ActionGrade.attempt,
+                ),
+                action(
+                  'op',
+                  homeTeam.id,
+                  null,
+                  Skill.opponentError,
+                  ActionGrade.success,
+                ),
+              ],
+            ),
+            Rally(
+              id: 'set-two',
+              setNumber: 2,
+              sequence: 1,
+              winnerTeamId: awayTeam.id,
+              homeScore: 0,
+              awayScore: 1,
+              homeRotation: 1,
+              awayRotation: 1,
+              servingTeamId: awayTeam.id,
+              recordedAt: now,
+              actions: [
+                action(
+                  'attack',
+                  homeTeam.id,
+                  homeTeam.players.first.id,
+                  Skill.attack,
+                  ActionGrade.error,
+                ),
+                action(
+                  'block',
+                  awayTeam.id,
+                  awayTeam.players.first.id,
+                  Skill.block,
+                  ActionGrade.success,
+                ),
+                action(
+                  'fault',
+                  homeTeam.id,
+                  null,
+                  Skill.teamFault,
+                  ActionGrade.error,
+                ),
+              ],
+            ),
+            Rally(
+              id: 'set-three',
+              setNumber: 3,
+              sequence: 1,
+              winnerTeamId: homeTeam.id,
+              homeScore: 1,
+              awayScore: 0,
+              homeRotation: 1,
+              awayRotation: 1,
+              servingTeamId: homeTeam.id,
+              recordedAt: now,
+            ),
+          ],
+        ).copyWith(
+          lineups: [
+            for (final setNumber in [1, 2, 3]) ...[
+              LineupSnapshot(
+                teamId: homeTeam.id,
+                playerIds: homeTeam.players.map((player) => player.id).toList(),
+                setNumber: setNumber,
+              ),
+              LineupSnapshot(
+                teamId: awayTeam.id,
+                playerIds: awayTeam.players.map((player) => player.id).toList(),
+                setNumber: setNumber,
+              ),
+            ],
+          ],
+        );
+    final game = testGame(officialLog: official).copyWith(
+      rulesSnapshot: const MatchRules(
+        setsToWin: 2,
+        maxSets: 3,
+        regularSetTarget: 1,
+        decidingSetTarget: 1,
+        winBy: 1,
+      ),
+    );
+    final data = AppData(
+      deviceId: 'test-device',
+      tournaments: [
+        testTournament(games: [game]),
+      ],
+    );
+    final repository = MemoryAppRepository(data);
+    await tester.binding.setSurfaceSize(const Size(1100, 900));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appRepositoryProvider.overrideWithValue(repository),
+          initialAppDataProvider.overrideWithValue(data),
+        ],
+        child: const MaterialApp(
+          home: ReconcilePage(tournamentId: 'tournament', gameId: 'game'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    String cell(DataTable table, int row, int column) =>
+        (table.rows[row].cells[column].child as Text).data!;
+    expect(find.text('Player stats'), findsOneWidget);
+    expect(find.text('Team totals: OP+ 1  •  T− 1'), findsOneWidget);
+    expect(find.text('Serve 0 / 1 / 0'), findsOneWidget);
+    var table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(cell(table, 0, 1), 'Home 1');
+    expect(cell(table, 0, 2), '3');
+    expect(cell(table, 0, 4), '0 / 1 / 0');
+    expect(cell(table, 0, 7), '0 / 0 / 1');
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'AWY'));
+    await tester.pumpAndSettle();
+    table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(cell(table, 0, 1), 'Away 1');
+    expect(cell(table, 0, 6), '1 / 0 / 0');
+    expect(cell(table, 0, 8), '0 / 1 / 0');
+    expect(find.text('Reception 1 / 0 / 0'), findsOneWidget);
+
+    await tester.tap(find.text('All sets'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Set 2').last);
+    await tester.pumpAndSettle();
+    table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(cell(table, 0, 2), '1');
+    expect(cell(table, 0, 6), '0 / 0 / 0');
+    expect(cell(table, 0, 8), '0 / 1 / 0');
+    expect(find.text('Reception 0 / 0 / 0'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reports render the ordered player stats summary matrix', (
     tester,
   ) async {
