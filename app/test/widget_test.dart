@@ -258,6 +258,13 @@ void main() {
         findsOneWidget,
       );
     }
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('timeline-draft-skill-0')))
+          .height,
+      lessThanOrEqualTo(48),
+      reason: 'Draft skills should sit tightly without shrinking the chip tap target.',
+    );
     await tester.tap(
       find.descendant(
         of: find.byKey(const ValueKey('timeline-draft-skill-0')),
@@ -997,6 +1004,7 @@ void main() {
     String cell(DataTable table, int row, int column) =>
         (table.rows[row].cells[column].child as Text).data!;
     expect(find.text('Player stats'), findsOneWidget);
+    expect(find.text('PTS'), findsOneWidget);
     expect(find.text('Team totals: OP+ 1  •  T− 1'), findsOneWidget);
     expect(find.text('Serve 0 / 1 / 0'), findsOneWidget);
     var table = tester.widget<DataTable>(find.byType(DataTable));
@@ -1004,6 +1012,7 @@ void main() {
     expect(cell(table, 0, 2), '3');
     expect(cell(table, 0, 4), '0 / 1 / 0');
     expect(cell(table, 0, 7), '0 / 0 / 1');
+    expect(cell(table, 0, 9), '1');
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'AWY'));
     await tester.pumpAndSettle();
@@ -1011,6 +1020,7 @@ void main() {
     expect(cell(table, 0, 1), 'Away 1');
     expect(cell(table, 0, 6), '1 / 0 / 0');
     expect(cell(table, 0, 8), '0 / 1 / 0');
+    expect(cell(table, 0, 9), '1');
     expect(find.text('Reception 1 / 0 / 0'), findsOneWidget);
 
     await tester.tap(find.text('All sets'));
@@ -1021,6 +1031,7 @@ void main() {
     expect(cell(table, 0, 2), '1');
     expect(cell(table, 0, 6), '0 / 0 / 0');
     expect(cell(table, 0, 8), '0 / 1 / 0');
+    expect(cell(table, 0, 9), '1');
     expect(find.text('Reception 0 / 0 / 0'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(const Size(390, 844));

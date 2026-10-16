@@ -1100,7 +1100,7 @@ class _GamePlayerStatsCardState extends State<_GamePlayerStatsCard> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Skill counts are ATT / EXC / ERR. OP+ and T− are team totals.',
+              'Skill counts are ATT / EXC / ERR. PTS = V+ + A+ + B+. OP+ and T− are team totals.',
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -1168,6 +1168,7 @@ class _GamePlayerStatsCardState extends State<_GamePlayerStatsCard> {
                     const DataColumn(label: Text('Sets')),
                     for (final skill in skills.keys)
                       DataColumn(label: Text(skill)),
+                    const DataColumn(label: Text('PTS')),
                   ],
                   rows: [
                     for (final row in players)
@@ -1182,6 +1183,7 @@ class _GamePlayerStatsCardState extends State<_GamePlayerStatsCard> {
                                 '${row.counts[code] ?? 0} / ${row.counts['$code+'] ?? 0} / ${row.counts['$code-'] ?? 0}',
                               ),
                             ),
+                          DataCell(Text('${row.points}')),
                         ],
                       ),
                   ],

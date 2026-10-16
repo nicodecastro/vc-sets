@@ -79,6 +79,9 @@ class GamePlayerStatRow {
   final Player player;
   final int setsPlayed;
   final Map<String, int> counts;
+
+  int get points =>
+      (counts['V+'] ?? 0) + (counts['A+'] ?? 0) + (counts['B+'] ?? 0);
 }
 
 class StandingRow {

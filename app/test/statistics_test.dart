@@ -102,6 +102,7 @@ void main() {
     expect(all.first.setsPlayed, 2);
     expect(all.first.counts['V+'], 1);
     expect(all.first.counts['A-'], 1);
+    expect(all.first.points, 1);
     expect(all.first.counts['OP+'], isNull);
     expect(all[1].setsPlayed, 2);
     expect(all[1].counts, isEmpty);
@@ -110,6 +111,7 @@ void main() {
     expect(setTwo.first.setsPlayed, 1);
     expect(setTwo.first.counts['V+'], isNull);
     expect(setTwo.first.counts['A-'], 1);
+    expect(setTwo.first.points, 0);
     expect(stats.gameTeamActionCount(game, home.id, Skill.opponentError), 1);
     expect(stats.gameTeamSkillCounts(game, home.id)['V+'], 1);
     expect(stats.gameTeamSkillCounts(game, home.id)['A-'], 1);
@@ -131,6 +133,24 @@ void main() {
       0,
     );
     expect(stats.gamePlayerStats(testGame(logs: [official]), home), isEmpty);
+  });
+
+  test('player points include only excellent serves, attacks, and blocks', () {
+    final row = GamePlayerStatRow(
+      player: homeTeam.players.first,
+      setsPlayed: 1,
+      counts: const {
+        'V+': 2,
+        'A+': 3,
+        'B+': 4,
+        'S+': 5,
+        'R+': 6,
+        'D+': 7,
+        'V-': 8,
+        'A': 9,
+      },
+    );
+    expect(row.points, 9);
   });
 
   test('finalized match drives standings and player totals', () {

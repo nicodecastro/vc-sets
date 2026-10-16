@@ -1578,6 +1578,7 @@ class _Timeline extends StatelessWidget {
                         return ListTile(
                           key: ValueKey('timeline-draft-skill-${index - 1}'),
                           dense: true,
+                          minVerticalPadding: 0,
                           contentPadding: const EdgeInsets.only(left: 56),
                           title: Align(
                             alignment: Alignment.centerLeft,
