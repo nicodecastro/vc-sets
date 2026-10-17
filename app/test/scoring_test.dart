@@ -14,6 +14,127 @@ void main() {
     expect(engine.isSetComplete(14, 16, 5, rules), isTrue);
   });
 
+  test('a game can override the target of an individual set', () {
+    const custom = MatchRules(setTargets: {2: 21, 5: 18});
+    expect(custom.targetForSet(1), 25);
+    expect(custom.targetForSet(2), 21);
+    expect(custom.targetForSet(5), 18);
+    expect(engine.isSetComplete(21, 19, 2, custom), isTrue);
+    expect(engine.isSetComplete(20, 18, 2, custom), isFalse);
+    expect(engine.isSetComplete(18, 16, 5, custom), isTrue);
+    expect(MatchRules.fromJson(custom.toJson()).setTargets, {2: 21, 5: 18});
+    expect(
+      MatchRules.fromJson(const MatchRules().toJson()).setTargets,
+      isEmpty,
+    );
+  });
+
+  test('extra rallies after a completed set are identified', () {
+    final log = testLog(
+      rallies: [
+        Rally(
+          id: 'r1',
+          setNumber: 1,
+          sequence: 1,
+          winnerTeamId: homeTeam.id,
+          homeScore: 1,
+          awayScore: 0,
+          homeRotation: 1,
+          awayRotation: 1,
+          servingTeamId: homeTeam.id,
+          recordedAt: DateTime.utc(2026, 10, 2),
+        ),
+        Rally(
+          id: 'r2',
+          setNumber: 1,
+          sequence: 2,
+          winnerTeamId: homeTeam.id,
+          homeScore: 2,
+          awayScore: 0,
+          homeRotation: 1,
+          awayRotation: 1,
+          servingTeamId: homeTeam.id,
+          recordedAt: DateTime.utc(2026, 10, 2),
+        ),
+      ],
+    );
+    expect(
+      engine.excessRallyReason(
+        log,
+        const MatchRules(
+          setsToWin: 1,
+          maxSets: 1,
+          regularSetTarget: 1,
+          winBy: 1,
+        ),
+      ),
+      contains('Remove the excess rally'),
+    );
+    expect(
+      engine.excessRallyReason(
+        testLog(
+          rallies: [
+            log.rallies.first,
+            Rally(
+              id: 'next-set',
+              setNumber: 2,
+              sequence: 1,
+              winnerTeamId: awayTeam.id,
+              homeScore: 0,
+              awayScore: 1,
+              homeRotation: 1,
+              awayRotation: 1,
+              servingTeamId: awayTeam.id,
+              recordedAt: DateTime.utc(2026, 10, 2),
+            ),
+          ],
+        ),
+        const MatchRules(
+          setsToWin: 1,
+          maxSets: 1,
+          regularSetTarget: 1,
+          winBy: 1,
+        ),
+      ),
+      contains('after the match was won'),
+    );
+  });
+
+  test('removing a middle rally requires correcting later scores', () {
+    final log = testLog(
+      rallies: [
+        Rally(
+          id: 'r1',
+          setNumber: 1,
+          sequence: 1,
+          winnerTeamId: homeTeam.id,
+          homeScore: 1,
+          awayScore: 0,
+          homeRotation: 1,
+          awayRotation: 1,
+          servingTeamId: homeTeam.id,
+          recordedAt: DateTime.utc(2026, 10, 2),
+        ),
+        Rally(
+          id: 'r3',
+          setNumber: 1,
+          sequence: 2,
+          winnerTeamId: homeTeam.id,
+          homeScore: 3,
+          awayScore: 0,
+          homeRotation: 1,
+          awayRotation: 1,
+          servingTeamId: homeTeam.id,
+          recordedAt: DateTime.utc(2026, 10, 2),
+        ),
+      ],
+    );
+    expect(
+      engine.scoreProgressionReason(testGame(), log),
+      contains('Manual override'),
+    );
+  });
+
   test('one-set matches use the regular target and finish after that set', () {
     const oneSetRules = MatchRules(setsToWin: 1, maxSets: 1);
     final game = testGame();

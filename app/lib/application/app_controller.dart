@@ -1312,27 +1312,75 @@ class AppController extends Notifier<AppData> {
     required Set<String> preferImported,
     required String reason,
     Map<String, Rally> rallyOverrides = const {},
+    Map<String, Map<int, int>> setMappings = const {},
+    Map<String, List<String>> excludedRallyIds = const {},
+    Map<int, int>? setTargets,
   }) async {
     await _updateGame(tournamentId, gameId, (tournament, game) {
       if (game.logs.length < 2) {
         throw StateError('Import the second scorer log first.');
       }
-      final result = const ReconciliationService().compare(
-        game.logs[0],
-        game.logs[1],
+      final rules = tournament.rulesFor(game);
+      final maxSets = rules.maxSets;
+      final effectiveTargets = setTargets ?? rules.setTargets;
+      if (effectiveTargets.entries.any(
+        (entry) => entry.key < 1 || entry.key > maxSets || entry.value < 1,
+      )) {
+        throw StateError(
+          'Set targets must be positive and within the match format.',
+        );
+      }
+      final effectiveRules = rules.copyWith(setTargets: effectiveTargets);
+      if (setMappings.values.any(
+        (mapping) => mapping.values.any((number) => number > maxSets),
+      )) {
+        throw StateError('A corrected set number exceeds the match format.');
+      }
+      const reconciliation = ReconciliationService();
+      final result = reconciliation.compare(
+        reconciliation.excludeRallies(
+          reconciliation.remapSetNumbers(
+            game.logs[0],
+            setMappings[game.logs[0].id] ?? const {},
+          ),
+          (excludedRallyIds[game.logs[0].id] ?? const []).toSet(),
+        ),
+        reconciliation.excludeRallies(
+          reconciliation.remapSetNumbers(
+            game.logs[1],
+            setMappings[game.logs[1].id] ?? const {},
+          ),
+          (excludedRallyIds[game.logs[1].id] ?? const []).toSet(),
+        ),
       );
       final now = DateTime.now();
-      final official = const ReconciliationService().merge(
+      final official = reconciliation.merge(
         result,
         preferImported: preferImported,
         officialLogId: _uuid.v4(),
         now: now,
         rallyOverrides: rallyOverrides,
       );
+      if (setMappings.isNotEmpty || excludedRallyIds.isNotEmpty) {
+        final setError = reconciliation.setSequenceError(official, maxSets);
+        if (setError != null) throw StateError(setError);
+      }
+      if (excludedRallyIds.isNotEmpty) {
+        final scoreError = const ScoringEngine().scoreProgressionReason(
+          game,
+          official,
+        );
+        if (scoreError != null) throw StateError(scoreError);
+      }
+      final excessReason = const ScoringEngine().excessRallyReason(
+        official,
+        effectiveRules,
+      );
+      if (excessReason != null) throw StateError(excessReason);
       final incompleteReason = const ScoringEngine().incompleteMatchReason(
         game,
         official,
-        tournament.rulesFor(game),
+        effectiveRules,
       );
       if (incompleteReason != null) {
         throw StateError(incompleteReason);
@@ -1342,10 +1390,14 @@ class AppController extends Notifier<AppData> {
         finalizedAt: now,
         reason: reason,
         officialLog: official,
+        setMappings: setMappings,
+        excludedRallyIds: excludedRallyIds,
+        setTargets: effectiveTargets,
       );
       return game.copyWith(
         status: GameStatus.finalized,
         officialLog: official,
+        rulesSnapshot: effectiveRules,
         revisions: [...game.revisions, revision],
       );
     });
@@ -1372,6 +1424,10 @@ class AppController extends Notifier<AppData> {
         rulesSnapshot: rules.copyWith(
           maxSets: maxSets,
           setsToWin: (maxSets ~/ 2) + 1,
+          setTargets: {
+            for (final entry in rules.setTargets.entries)
+              if (entry.key <= maxSets) entry.key: entry.value,
+          },
         ),
       );
     });

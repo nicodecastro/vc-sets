@@ -56,6 +56,43 @@ void main() {
     expect(restored.importedPackageIds, ['one']);
   });
 
+  test('backup preserves per-set targets and reconciliation exclusions', () {
+    final official = testLog(id: 'official');
+    final game = testGame(logs: [testLog()], officialLog: official).copyWith(
+      rulesSnapshot: const MatchRules(setTargets: {2: 21}),
+      revisions: [
+        FinalizationRevision(
+          id: 'revision',
+          finalizedAt: DateTime.utc(2026, 10, 2),
+          reason: 'Corrected scores',
+          officialLog: official,
+          setTargets: const {2: 21},
+          excludedRallyIds: const {
+            'log-a': ['extra'],
+          },
+        ),
+      ],
+    );
+    final data = AppData(
+      deviceId: 'device-a',
+      tournaments: [
+        testTournament(games: [game]),
+      ],
+    );
+    final restored = service.decodeBackup(
+      service.createBackup(
+        packageId: 'corrected-backup',
+        data: data,
+        exportedAt: DateTime.utc(2026, 10, 2),
+      ),
+    );
+    final saved = restored.tournaments.single.games.single;
+    expect(saved.rulesSnapshot!.setTargets, {2: 21});
+    expect(saved.revisions.single.excludedRallyIds, {
+      'log-a': ['extra'],
+    });
+  });
+
   test('legacy UT player positions restore as U', () {
     final player = Player.fromJson(const {
       'id': 'utility',

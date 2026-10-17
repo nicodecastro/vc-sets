@@ -7,6 +7,43 @@ import 'package:vc_sets/domain/statistics.dart';
 import 'test_fixtures.dart';
 
 void main() {
+  test('reports tolerate rules without an initialized set-target map', () {
+    const rules = MatchRules(setsToWin: 1, maxSets: 1, setTargets: null);
+    final official =
+        testLog(
+          id: 'official',
+          rallies: [
+            Rally(
+              id: 'last-point',
+              setNumber: 1,
+              sequence: 1,
+              winnerTeamId: homeTeam.id,
+              homeScore: 25,
+              awayScore: 0,
+              homeRotation: 1,
+              awayRotation: 1,
+              servingTeamId: homeTeam.id,
+              recordedAt: DateTime.utc(2026, 10, 2),
+            ),
+          ],
+        ).copyWith(
+          lineups: [
+            LineupSnapshot(
+              teamId: homeTeam.id,
+              playerIds: homeTeam.players.map((player) => player.id).toList(),
+              setNumber: 1,
+            ),
+          ],
+        );
+    final tournament = testTournament(
+      games: [testGame(officialLog: official).copyWith(rulesSnapshot: rules)],
+    );
+    const stats = StatisticsService();
+    expect(rules.setTargets, isEmpty);
+    expect(stats.standings(tournament).first.wins, 1);
+    expect(stats.playerStatsSummary(tournament).first.gamesPlayed, 1);
+  });
+
   test('game stats use only the official log and honor the set filter', () {
     final now = DateTime.utc(2026, 10, 2);
     final home = homeTeam.copyWith(players: homeTeam.players.reversed.toList());

@@ -33,6 +33,105 @@ class ReconciliationResult {
 class ReconciliationService {
   const ReconciliationService();
 
+  static const _setCollections = [
+    'rallies',
+    'lineups',
+    'substitutions',
+    'timeouts',
+    'rotationAdjustments',
+  ];
+
+  List<int> setNumbers(ScorerLog log) {
+    final json = log.toJson();
+    final numbers = <int>{};
+    for (final collection in _setCollections) {
+      for (final record in json[collection]! as List<Object?>) {
+        numbers.add((record! as Map<String, Object?>)['setNumber']! as int);
+      }
+    }
+    return numbers.toList()..sort();
+  }
+
+  ScorerLog remapSetNumbers(ScorerLog log, Map<int, int> mapping) {
+    if (mapping.isEmpty) return log;
+    final sourceNumbers = setNumbers(log).toSet();
+    if (mapping.keys.any((number) => !sourceNumbers.contains(number)) ||
+        mapping.values.any((number) => number < 1) ||
+        sourceNumbers
+                .map((number) => mapping[number] ?? number)
+                .toSet()
+                .length !=
+            sourceNumbers.length) {
+      throw ArgumentError('Set numbers must remain positive and unique.');
+    }
+    final json = log.toJson();
+    for (final collection in _setCollections) {
+      for (final record in json[collection]! as List<Object?>) {
+        final values = record! as Map<String, Object?>;
+        final number = values['setNumber']! as int;
+        values['setNumber'] = mapping[number] ?? number;
+      }
+    }
+    return ScorerLog.fromJson(json);
+  }
+
+  ScorerLog excludeRallies(ScorerLog log, Set<String> rallyIds) {
+    if (rallyIds.isEmpty) return log;
+    final knownIds = log.rallies.map((rally) => rally.id).toSet();
+    if (!knownIds.containsAll(rallyIds)) {
+      throw ArgumentError('An excluded rally is not in this scorer log.');
+    }
+    final json = log.toJson();
+    final original = (json['rallies']! as List<Object?>)
+        .cast<Map<String, Object?>>();
+    final removed = original
+        .where((rally) => rallyIds.contains(rally['id']))
+        .toList();
+    final nextSequence = <int, int>{};
+    final kept = <Map<String, Object?>>[];
+    for (final rally in original) {
+      if (rallyIds.contains(rally['id'])) continue;
+      rally['sequence'] = nextSequence.update(
+        rally['setNumber']! as int,
+        (value) => value + 1,
+        ifAbsent: () => 1,
+      );
+      kept.add(rally);
+    }
+    json['rallies'] = kept;
+    json['corrections'] = (json['corrections']! as List<Object?>)
+        .where(
+          (record) =>
+              !rallyIds.contains((record! as Map<String, Object?>)['rallyId']),
+        )
+        .toList();
+    for (final record in json['rotationAdjustments']! as List<Object?>) {
+      final adjustment = record! as Map<String, Object?>;
+      final set = adjustment['setNumber']! as int;
+      final sequence = adjustment['afterRallySequence']! as int;
+      adjustment['afterRallySequence'] =
+          sequence -
+          removed
+              .where(
+                (rally) =>
+                    rally['setNumber'] == set &&
+                    (rally['sequence']! as int) <= sequence,
+              )
+              .length;
+    }
+    return ScorerLog.fromJson(json);
+  }
+
+  String? setSequenceError(ScorerLog log, int maxSets) {
+    final numbers = log.rallies.map((rally) => rally.setNumber).toSet().toList()
+      ..sort();
+    if (numbers.length > maxSets ||
+        numbers.asMap().entries.any((entry) => entry.value != entry.key + 1)) {
+      return 'Corrected sets must be numbered consecutively from 1 within the match format.';
+    }
+    return null;
+  }
+
   ReconciliationResult compare(ScorerLog primary, ScorerLog imported) {
     if (primary.gameId != imported.gameId) {
       throw ArgumentError('Scorer logs belong to different games.');

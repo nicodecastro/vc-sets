@@ -499,5 +499,9 @@ class BackupPage extends ConsumerWidget {
       source.maxSets == target.maxSets &&
       source.regularSetTarget == target.regularSetTarget &&
       source.decidingSetTarget == target.decidingSetTarget &&
+      source.setTargets.length == target.setTargets.length &&
+      source.setTargets.entries.every(
+        (entry) => target.setTargets[entry.key] == entry.value,
+      ) &&
       source.winBy == target.winBy;
 }

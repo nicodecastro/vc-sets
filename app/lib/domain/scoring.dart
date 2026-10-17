@@ -134,11 +134,56 @@ class ScoringEngine {
   }
 
   bool isSetComplete(int home, int away, int setNumber, MatchRules rules) {
-    final target = rules.maxSets > 1 && setNumber == rules.maxSets
-        ? rules.decidingSetTarget
-        : rules.regularSetTarget;
+    final target = rules.targetForSet(setNumber);
     return (home >= target || away >= target) &&
         (home - away).abs() >= rules.winBy;
+  }
+
+  String? excessRallyReason(ScorerLog log, MatchRules rules) {
+    final completedSets = <int>{};
+    var homeSets = 0;
+    var awaySets = 0;
+    for (final rally in log.rallies) {
+      if (homeSets >= rules.setsToWin || awaySets >= rules.setsToWin) {
+        return 'Set ${rally.setNumber} has rally ${rally.sequence} after the match was won. Remove the excess rally.';
+      }
+      if (completedSets.contains(rally.setNumber)) {
+        return 'Set ${rally.setNumber} has rally ${rally.sequence} after its target score was reached. Remove the excess rally or change that set’s target.';
+      }
+      if (isSetComplete(
+        rally.homeScore,
+        rally.awayScore,
+        rally.setNumber,
+        rules,
+      )) {
+        completedSets.add(rally.setNumber);
+        if (rally.homeScore > rally.awayScore) {
+          homeSets++;
+        } else {
+          awaySets++;
+        }
+      }
+    }
+    return null;
+  }
+
+  String? scoreProgressionReason(Game game, ScorerLog log) {
+    final scores = <int, (int, int)>{};
+    for (final rally in log.rallies) {
+      final previous = scores[rally.setNumber] ?? (0, 0);
+      final expected = rally.winnerTeamId == game.homeTeamId
+          ? (previous.$1 + 1, previous.$2)
+          : rally.winnerTeamId == game.awayTeamId
+          ? (previous.$1, previous.$2 + 1)
+          : null;
+      if (expected == null ||
+          rally.homeScore != expected.$1 ||
+          rally.awayScore != expected.$2) {
+        return 'Set ${rally.setNumber}, rally ${rally.sequence} has a score that does not follow the previous rally. Correct its score in Manual override before finalizing.';
+      }
+      scores[rally.setNumber] = expected;
+    }
+    return null;
   }
 
   String? incompleteMatchReason(Game game, ScorerLog log, MatchRules rules) {
@@ -148,9 +193,7 @@ class ScoringEngine {
       return 'The reconciled log has no rallies. A team must win '
           '${rules.setsToWin} set(s) to complete this match.';
     }
-    final target = rules.maxSets > 1 && current.setNumber == rules.maxSets
-        ? rules.decidingSetTarget
-        : rules.regularSetTarget;
+    final target = rules.targetForSet(current.setNumber);
     return 'The reconciled result is ${current.homeSets}-${current.awaySets} '
         'in sets, but ${rules.setsToWin} set win(s) are required. '
         'Set ${current.setNumber} is ${current.homePoints}-${current.awayPoints}; '

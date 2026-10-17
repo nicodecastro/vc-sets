@@ -670,6 +670,11 @@ void main() {
       'A7-',
     );
     expect(find.textContaining('winner '), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('The reconciled match is incomplete'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('The reconciled match is incomplete'), findsOneWidget);
     expect(
       find.textContaining('Set 1 is 1-0; a team must reach 25'),
@@ -725,6 +730,153 @@ void main() {
     expect(find.text('Set 1 • Rally 1 • 25-0'), findsOneWidget);
     expect(find.text('R1  B2+  A7-'), findsOneWidget);
   });
+
+  testWidgets('reconciliation swaps a scorer’s whole sets before comparison', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 10, 2);
+    Rally point(String id, int set, String winner) => Rally(
+      id: id,
+      setNumber: set,
+      sequence: 1,
+      winnerTeamId: winner,
+      homeScore: winner == homeTeam.id ? 1 : 0,
+      awayScore: winner == awayTeam.id ? 1 : 0,
+      homeRotation: 1,
+      awayRotation: 1,
+      servingTeamId: winner,
+      recordedAt: now,
+    );
+    final primary = testLog(
+      rallies: [point('a1', 1, homeTeam.id), point('a2', 2, awayTeam.id)],
+    );
+    final imported = testLog(
+      id: 'log-b',
+      assignedTeamId: awayTeam.id,
+      deviceId: 'device-b',
+      rallies: [point('b1', 1, awayTeam.id), point('b2', 2, homeTeam.id)],
+    );
+    final game = testGame(logs: [primary, imported]);
+    final data = AppData(
+      deviceId: 'device-a',
+      tournaments: [
+        testTournament(games: [game]),
+      ],
+    );
+    await tester.binding.setSurfaceSize(const Size(430, 1000));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appRepositoryProvider.overrideWithValue(MemoryAppRepository(data)),
+          initialAppDataProvider.overrideWithValue(data),
+        ],
+        child: const MaterialApp(
+          home: ReconcilePage(tournamentId: 'tournament', gameId: 'game'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 decision(s) required'), findsOneWidget);
+    await tester.tap(find.text('Correct set numbers'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recorded set 1 • 0-1'), findsOneWidget);
+    final selector = find.byKey(const ValueKey('set-number-log-b-1'));
+    await tester.ensureVisible(selector);
+    tester.widget<DropdownButton<int>>(selector).onChanged!(2);
+    await tester.pumpAndSettle();
+    expect(find.text('The independent score streams agree'), findsOneWidget);
+    expect(tester.widget<DropdownButton<int>>(selector).value, 2);
+    expect(
+      tester
+          .widget<DropdownButton<int>>(
+            find.byKey(const ValueKey('set-number-log-b-2')),
+          )
+          .value,
+      1,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'set target and excess rally controls update comparison preview',
+    (tester) async {
+      final now = DateTime.utc(2026, 10, 2);
+      Rally point(String id, int sequence) => Rally(
+        id: id,
+        setNumber: 1,
+        sequence: sequence,
+        winnerTeamId: homeTeam.id,
+        homeScore: sequence,
+        awayScore: 0,
+        homeRotation: 1,
+        awayRotation: 1,
+        servingTeamId: homeTeam.id,
+        recordedAt: now,
+      );
+      final primary = testLog(
+        rallies: [point('a1', 1), point('a2', 2), point('extra', 3)],
+      );
+      final imported = testLog(
+        id: 'log-b',
+        assignedTeamId: awayTeam.id,
+        deviceId: 'device-b',
+        rallies: [point('b1', 1), point('b2', 2)],
+      );
+      final game = testGame(logs: [primary, imported]).copyWith(
+        rulesSnapshot: const MatchRules(setsToWin: 1, maxSets: 1, winBy: 1),
+      );
+      final data = AppData(
+        deviceId: 'device-a',
+        tournaments: [
+          testTournament(games: [game]),
+        ],
+      );
+      await tester.binding.setSurfaceSize(const Size(430, 1000));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appRepositoryProvider.overrideWithValue(MemoryAppRepository(data)),
+            initialAppDataProvider.overrideWithValue(data),
+          ],
+          child: const MaterialApp(
+            home: ReconcilePage(tournamentId: 'tournament', gameId: 'game'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('1 decision(s) required'), findsOneWidget);
+      await tester.tap(find.text('Set targets and excess rallies'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byTooltip('Edit set 1 target'));
+      await tester.tap(find.byTooltip('Edit set 1 target'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('set-target-input')),
+        '2',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('2 points • win by 1'), findsOneWidget);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('exclude-log-log-a')),
+      );
+      await tester.tap(find.text('HOM scorer rallies'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Set 1').last);
+      await tester.pumpAndSettle();
+      final extra = find.byKey(const ValueKey('exclude-rally-log-a-extra'));
+      await tester.ensureVisible(extra);
+      await tester.tap(extra);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('The independent score streams agree'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('The independent score streams agree'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('finalized games replace reconcile with an audit summary', (
     tester,
@@ -828,6 +980,11 @@ void main() {
     expect(find.text('Undo reconciliation?'), findsOneWidget);
     await tester.tap(find.text('Undo reconciliation').last);
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Finalize official match'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Finalize official match'), findsOneWidget);
     final reopened = (await repository.load()).tournaments.single.games.single;
     expect(reopened.status, GameStatus.awaitingReconciliation);

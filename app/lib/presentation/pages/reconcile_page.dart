@@ -36,8 +36,144 @@ class ReconcilePage extends ConsumerStatefulWidget {
 class _ReconcilePageState extends ConsumerState<ReconcilePage> {
   final choices = <String, bool>{};
   final rallyOverrides = <String, Rally>{};
+  final setMappings = <String, Map<int, int>>{};
+  final excludedRallyIds = <String, Set<String>>{};
+  Map<int, int>? editedSetTargets;
   bool saving = false;
   bool showManualOverrides = false;
+
+  Map<int, int> _targetsFor(MatchRules rules) => {
+    for (final entry in (editedSetTargets ?? rules.setTargets).entries)
+      if (entry.key <= rules.maxSets) entry.key: entry.value,
+  };
+
+  Set<String> _excludedFor(Game game, ScorerLog log) =>
+      excludedRallyIds[log.id] ??
+      (game.revisions.isEmpty
+          ? const <String>{}
+          : (game.revisions.last.excludedRallyIds[log.id] ?? const <String>[])
+                .toSet());
+
+  Map<String, List<String>> _activeExclusions(Game game) => {
+    for (final log in game.logs.take(2))
+      if (_excludedFor(game, log).isNotEmpty)
+        log.id: _excludedFor(game, log).toList(),
+  };
+
+  void _toggleExcluded(
+    Game game,
+    ScorerLog log,
+    String rallyId,
+    bool excluded,
+  ) {
+    final selected = {..._excludedFor(game, log)};
+    if (excluded) {
+      selected.add(rallyId);
+    } else {
+      selected.remove(rallyId);
+    }
+    setState(() {
+      excludedRallyIds[log.id] = selected;
+      choices.clear();
+      rallyOverrides.clear();
+    });
+  }
+
+  Future<void> _editSetTarget(MatchRules rules, int setNumber) async {
+    final current = rules.copyWith(setTargets: _targetsFor(rules));
+    var inputText = '${current.targetForSet(setNumber)}';
+    final value = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Set $setNumber target score'),
+        content: TextFormField(
+          key: const ValueKey('set-target-input'),
+          initialValue: inputText,
+          onChanged: (value) => inputText = value,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Points to win',
+            helperText: 'Win-by-two still applies.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final target = int.tryParse(inputText.trim());
+              if (target == null || target < 1) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter a positive target score.'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, target);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || !mounted) return;
+    final defaults = rules.copyWith(setTargets: const {});
+    final targets = {..._targetsFor(rules)};
+    if (value == defaults.targetForSet(setNumber)) {
+      targets.remove(setNumber);
+    } else {
+      targets[setNumber] = value;
+    }
+    setState(() => editedSetTargets = targets);
+  }
+
+  Map<int, int> _mappingFor(Game game, ScorerLog log) =>
+      setMappings[log.id] ??
+      (game.revisions.isEmpty
+          ? const {}
+          : game.revisions.last.setMappings[log.id] ?? const {});
+
+  Map<String, Map<int, int>> _activeMappings(Game game) {
+    const reconciliation = ReconciliationService();
+    return {
+      for (final log in game.logs.take(2))
+        if (reconciliation
+            .setNumbers(log)
+            .any(
+              (number) => (_mappingFor(game, log)[number] ?? number) != number,
+            ))
+          log.id: _mappingFor(game, log),
+    };
+  }
+
+  String _recordedSetLabel(ScorerLog log, int number) {
+    final rallies = log.rallies.where((rally) => rally.setNumber == number);
+    if (rallies.isEmpty) return 'Recorded set $number';
+    final last = rallies.last;
+    return 'Recorded set $number • ${last.homeScore}-${last.awayScore}';
+  }
+
+  void _changeSetNumber(Game game, ScorerLog log, int source, int target) {
+    const reconciliation = ReconciliationService();
+    final numbers = reconciliation.setNumbers(log);
+    final mapping = {..._mappingFor(game, log)};
+    final previous = mapping[source] ?? source;
+    final displaced = numbers.where(
+      (number) => number != source && (mapping[number] ?? number) == target,
+    );
+    if (displaced.isNotEmpty) mapping[displaced.single] = previous;
+    mapping[source] = target;
+    setState(() {
+      setMappings[log.id] = mapping;
+      choices.clear();
+      rallyOverrides.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(appControllerProvider);
@@ -48,9 +184,31 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
       (item) => item.id == widget.gameId,
     );
     if (game.status == GameStatus.finalized) {
+      final mappings = game.revisions.isEmpty
+          ? const <String, Map<int, int>>{}
+          : game.revisions.last.setMappings;
+      final exclusions = game.revisions.isEmpty
+          ? const <String, List<String>>{}
+          : game.revisions.last.excludedRallyIds;
+      const reconciliation = ReconciliationService();
       final comparison = game.logs.length < 2
           ? null
-          : const ReconciliationService().compare(game.logs[0], game.logs[1]);
+          : reconciliation.compare(
+              reconciliation.excludeRallies(
+                reconciliation.remapSetNumbers(
+                  game.logs[0],
+                  mappings[game.logs[0].id] ?? const {},
+                ),
+                (exclusions[game.logs[0].id] ?? const []).toSet(),
+              ),
+              reconciliation.excludeRallies(
+                reconciliation.remapSetNumbers(
+                  game.logs[1],
+                  mappings[game.logs[1].id] ?? const {},
+                ),
+                (exclusions[game.logs[1].id] ?? const []).toSet(),
+              ),
+            );
       return _FinalizedReconciliationSummary(
         tournament: tournament,
         game: game,
@@ -71,13 +229,29 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
         ),
       );
     }
-    final comparison = const ReconciliationService().compare(
-      game.logs[0],
-      game.logs[1],
+    const reconciliation = ReconciliationService();
+    final activeMappings = _activeMappings(game);
+    final activeExclusions = _activeExclusions(game);
+    final rules = tournament.rulesFor(game);
+    final effectiveRules = rules.copyWith(setTargets: _targetsFor(rules));
+    final comparison = reconciliation.compare(
+      reconciliation.excludeRallies(
+        reconciliation.remapSetNumbers(
+          game.logs[0],
+          activeMappings[game.logs[0].id] ?? const {},
+        ),
+        (activeExclusions[game.logs[0].id] ?? const []).toSet(),
+      ),
+      reconciliation.excludeRallies(
+        reconciliation.remapSetNumbers(
+          game.logs[1],
+          activeMappings[game.logs[1].id] ?? const {},
+        ),
+        (activeExclusions[game.logs[1].id] ?? const []).toSet(),
+      ),
     );
     final home = tournament.team(game.homeTeamId);
     final away = tournament.team(game.awayTeamId);
-    final rules = tournament.rulesFor(game);
     final allResolved = comparison.conflicts.every(
       (conflict) => choices.containsKey(conflict.key),
     );
@@ -91,11 +265,20 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
       now: DateTime.now(),
       rallyOverrides: rallyOverrides,
     );
-    final incompleteReason = const ScoringEngine().incompleteMatchReason(
-      game,
-      preview,
-      tournament.rulesFor(game),
-    );
+    final incompleteReason = activeMappings.isEmpty && activeExclusions.isEmpty
+        ? null
+        : reconciliation.setSequenceError(preview, rules.maxSets);
+    final matchError =
+        incompleteReason ??
+        (activeExclusions.isEmpty
+            ? null
+            : const ScoringEngine().scoreProgressionReason(game, preview)) ??
+        const ScoringEngine().excessRallyReason(preview, effectiveRules) ??
+        const ScoringEngine().incompleteMatchReason(
+          game,
+          preview,
+          effectiveRules,
+        );
     return Scaffold(
       appBar: AppBar(
         leading: const BackButton(),
@@ -105,6 +288,202 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
+            Card(
+              child: ExpansionTile(
+                key: const ValueKey('set-order-panel'),
+                title: const Text('Correct set numbers'),
+                subtitle: const Text('Before comparing scorer logs'),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Choose the correct set number for an entire recorded set. Occupied numbers swap automatically. Scores, player actions, and lineup events move together; source logs stay unchanged.',
+                        ),
+                        for (final log in game.logs.take(2)) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            '${tournament.team(log.assignedTeamId).shortCode} scorer',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          for (final source in reconciliation.setNumbers(log))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(_recordedSetLabel(log, source)),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  DropdownButton<int>(
+                                    key: ValueKey(
+                                      'set-number-${log.id}-$source',
+                                    ),
+                                    value:
+                                        _mappingFor(game, log)[source] ??
+                                        source,
+                                    items: [
+                                      for (final number in <int>{
+                                        for (
+                                          var value = 1;
+                                          value <= rules.maxSets;
+                                          value++
+                                        )
+                                          value,
+                                        source,
+                                        _mappingFor(game, log)[source] ??
+                                            source,
+                                      })
+                                        DropdownMenuItem(
+                                          value: number,
+                                          child: Text('Set $number'),
+                                        ),
+                                    ],
+                                    onChanged: saving
+                                        ? null
+                                        : (target) {
+                                            if (target != null) {
+                                              _changeSetNumber(
+                                                game,
+                                                log,
+                                                source,
+                                                target,
+                                              );
+                                            }
+                                          },
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Card(
+              child: ExpansionTile(
+                key: const ValueKey('set-target-exclusion-panel'),
+                title: const Text('Set targets and excess rallies'),
+                subtitle: const Text('Adjust before reviewing differences'),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Set the points needed to win each set. Exclude any extra recorded rallies from the comparison; original scorer logs remain available.',
+                        ),
+                        const SizedBox(height: 12),
+                        for (final setNumber in <int>{
+                          for (final log in game.logs.take(2))
+                            ...reconciliation.setNumbers(
+                              reconciliation.remapSetNumbers(
+                                log,
+                                activeMappings[log.id] ?? const {},
+                              ),
+                            ),
+                        }.toList()..sort())
+                          ListTile(
+                            key: ValueKey('set-target-$setNumber'),
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('Set $setNumber target'),
+                            subtitle: Text(
+                              '${effectiveRules.targetForSet(setNumber)} points • win by ${effectiveRules.winBy}',
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Edit set $setNumber target',
+                              onPressed: saving
+                                  ? null
+                                  : () => _editSetTarget(rules, setNumber),
+                              icon: const Icon(Icons.edit),
+                            ),
+                          ),
+                        const Divider(),
+                        for (final log in game.logs.take(2))
+                          ExpansionTile(
+                            key: ValueKey('exclude-log-${log.id}'),
+                            tilePadding: EdgeInsets.zero,
+                            title: Text(
+                              '${tournament.team(log.assignedTeamId).shortCode} scorer rallies',
+                            ),
+                            subtitle: Text(
+                              '${_excludedFor(game, log).length} excluded',
+                            ),
+                            children: [
+                              for (final setNumber in reconciliation.setNumbers(
+                                reconciliation.remapSetNumbers(
+                                  log,
+                                  activeMappings[log.id] ?? const {},
+                                ),
+                              ))
+                                ExpansionTile(
+                                  key: ValueKey(
+                                    'exclude-set-${log.id}-$setNumber',
+                                  ),
+                                  title: Text('Set $setNumber'),
+                                  children: [
+                                    for (final rally
+                                        in reconciliation
+                                            .remapSetNumbers(
+                                              log,
+                                              activeMappings[log.id] ??
+                                                  const {},
+                                            )
+                                            .rallies
+                                            .where(
+                                              (item) =>
+                                                  item.setNumber == setNumber,
+                                            ))
+                                      CheckboxListTile(
+                                        key: ValueKey(
+                                          'exclude-rally-${log.id}-${rally.id}',
+                                        ),
+                                        value: _excludedFor(
+                                          game,
+                                          log,
+                                        ).contains(rally.id),
+                                        onChanged: saving
+                                            ? null
+                                            : (value) => _toggleExcluded(
+                                                game,
+                                                log,
+                                                rally.id,
+                                                value ?? false,
+                                              ),
+                                        title: Text(
+                                          'Rally ${rally.sequence} • ${rally.homeScore}-${rally.awayScore}',
+                                        ),
+                                        subtitle: Text(
+                                          rally.actions.isEmpty
+                                              ? 'No player actions'
+                                              : rally.actions
+                                                    .map(
+                                                      (action) =>
+                                                          action.notation(
+                                                            tournament.team(
+                                                              action.teamId,
+                                                            ),
+                                                          ),
+                                                    )
+                                                    .join('  '),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Card(
               color: comparison.conflicts.isEmpty
                   ? Theme.of(context).colorScheme.primaryContainer
@@ -232,7 +611,7 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
               ),
             ),
             const SizedBox(height: 8),
-            if (incompleteReason != null) ...[
+            if (matchError != null) ...[
               Card(
                 color: Theme.of(context).colorScheme.errorContainer,
                 child: Padding(
@@ -251,7 +630,7 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 4),
-                            Text(incompleteReason),
+                            Text(matchError),
                           ],
                         ),
                       ),
@@ -328,7 +707,7 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
             ],
             const SizedBox(height: 8),
             FilledButton.icon(
-              onPressed: !allResolved || saving || incompleteReason != null
+              onPressed: !allResolved || saving || matchError != null
                   ? null
                   : () => _finalize(comparison),
               icon: const Icon(Icons.verified),
@@ -614,6 +993,16 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
   Future<void> _finalize(ReconciliationResult result) async {
     setState(() => saving = true);
     try {
+      final data = ref.read(appControllerProvider);
+      final game = data.tournaments
+          .firstWhere((item) => item.id == widget.tournamentId)
+          .games
+          .firstWhere((item) => item.id == widget.gameId);
+      final activeMappings = _activeMappings(game);
+      final activeExclusions = _activeExclusions(game);
+      final rules = data.tournaments
+          .firstWhere((item) => item.id == widget.tournamentId)
+          .rulesFor(game);
       await ref
           .read(appControllerProvider.notifier)
           .finalizeReconciliation(
@@ -623,10 +1012,14 @@ class _ReconcilePageState extends ConsumerState<ReconcilePage> {
                 .where((entry) => entry.value)
                 .map((entry) => entry.key)
                 .toSet(),
-            reason: rallyOverrides.isEmpty
-                ? 'Initial two-device reconciliation'
-                : 'Initial two-device reconciliation with ${rallyOverrides.length} manual override(s)',
+            reason:
+                'Two-device reconciliation with ${activeMappings.length} set mapping(s), '
+                '${activeExclusions.values.fold<int>(0, (sum, ids) => sum + ids.length)} excluded rally/rallies, '
+                '${rallyOverrides.length} manual override(s)',
             rallyOverrides: rallyOverrides,
+            setMappings: activeMappings,
+            excludedRallyIds: activeExclusions,
+            setTargets: _targetsFor(rules),
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -973,6 +1366,23 @@ class _FinalizedReconciliationSummary extends StatelessWidget {
                         'Finalized ${DateFormat.yMMMd().add_jm().format(revision.finalizedAt.toLocal())}',
                       ),
                       Text('Reason: ${revision.reason}'),
+                      for (final log in game.logs.take(2))
+                        for (final entry
+                            in (revision.setMappings[log.id] ??
+                                    const <int, int>{})
+                                .entries)
+                          if (entry.key != entry.value)
+                            Text(
+                              '${tournament.team(log.assignedTeamId).shortCode} scorer: recorded set ${entry.key} → set ${entry.value}',
+                            ),
+                      for (final entry in revision.setTargets.entries)
+                        Text('Set ${entry.key} target: ${entry.value} points'),
+                      for (final log in game.logs.take(2))
+                        if ((revision.excludedRallyIds[log.id] ?? const [])
+                            .isNotEmpty)
+                          Text(
+                            '${tournament.team(log.assignedTeamId).shortCode} scorer: ${revision.excludedRallyIds[log.id]!.length} rally/rallies excluded from comparison',
+                          ),
                       if (game.revisions.length > 1)
                         Text('Revision ${game.revisions.length}'),
                     ],

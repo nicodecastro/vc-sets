@@ -172,7 +172,8 @@ class MatchRules {
     this.winBy = 2,
     this.maxSets = 5,
     this.standings = const StandingsPolicy(),
-  });
+    Map<int, int>? setTargets,
+  }) : _setTargets = setTargets;
 
   final int setsToWin;
   final int regularSetTarget;
@@ -180,6 +181,14 @@ class MatchRules {
   final int winBy;
   final int maxSets;
   final StandingsPolicy standings;
+  final Map<int, int>? _setTargets;
+  Map<int, int> get setTargets => _setTargets ?? const {};
+
+  int targetForSet(int setNumber) =>
+      setTargets[setNumber] ??
+      (maxSets > 1 && setNumber == maxSets
+          ? decidingSetTarget
+          : regularSetTarget);
 
   MatchRules copyWith({
     int? setsToWin,
@@ -188,6 +197,7 @@ class MatchRules {
     int? winBy,
     int? maxSets,
     StandingsPolicy? standings,
+    Map<int, int>? setTargets,
   }) => MatchRules(
     setsToWin: setsToWin ?? this.setsToWin,
     regularSetTarget: regularSetTarget ?? this.regularSetTarget,
@@ -195,6 +205,7 @@ class MatchRules {
     winBy: winBy ?? this.winBy,
     maxSets: maxSets ?? this.maxSets,
     standings: standings ?? this.standings,
+    setTargets: setTargets ?? this.setTargets,
   );
 
   Map<String, Object?> toJson() => {
@@ -204,6 +215,10 @@ class MatchRules {
     'winBy': winBy,
     'maxSets': maxSets,
     'standings': standings.toJson(),
+    if (setTargets.isNotEmpty)
+      'setTargets': {
+        for (final entry in setTargets.entries) '${entry.key}': entry.value,
+      },
   };
 
   factory MatchRules.fromJson(Map<String, Object?> json) => MatchRules(
@@ -215,6 +230,10 @@ class MatchRules {
     standings: StandingsPolicy.fromJson(
       ((json['standings'] as Map?) ?? const {}).cast<String, Object?>(),
     ),
+    setTargets: {
+      for (final entry in ((json['setTargets'] as Map?) ?? const {}).entries)
+        int.parse(entry.key as String): (entry.value as num).toInt(),
+    },
   );
 }
 
@@ -731,29 +750,65 @@ class FinalizationRevision {
     required this.finalizedAt,
     required this.reason,
     required this.officialLog,
+    this.setMappings = const {},
+    this.excludedRallyIds = const {},
+    this.setTargets = const {},
   });
 
   final String id;
   final DateTime finalizedAt;
   final String reason;
   final ScorerLog officialLog;
+  final Map<String, Map<int, int>> setMappings;
+  final Map<String, List<String>> excludedRallyIds;
+  final Map<int, int> setTargets;
 
   Map<String, Object?> toJson() => {
     'id': id,
     'finalizedAt': finalizedAt.toUtc().toIso8601String(),
     'reason': reason,
     'officialLog': officialLog.toJson(),
+    if (setMappings.isNotEmpty)
+      'setMappings': {
+        for (final entry in setMappings.entries)
+          entry.key: {
+            for (final mapping in entry.value.entries)
+              '${mapping.key}': mapping.value,
+          },
+      },
+    if (excludedRallyIds.isNotEmpty) 'excludedRallyIds': excludedRallyIds,
+    if (setTargets.isNotEmpty)
+      'setTargets': {
+        for (final entry in setTargets.entries) '${entry.key}': entry.value,
+      },
   };
 
-  factory FinalizationRevision.fromJson(Map<String, Object?> json) =>
-      FinalizationRevision(
-        id: json['id']! as String,
-        finalizedAt: DateTime.parse(json['finalizedAt']! as String),
-        reason: json['reason']! as String,
-        officialLog: ScorerLog.fromJson(
-          (json['officialLog']! as Map).cast<String, Object?>(),
-        ),
-      );
+  factory FinalizationRevision.fromJson(
+    Map<String, Object?> json,
+  ) => FinalizationRevision(
+    id: json['id']! as String,
+    finalizedAt: DateTime.parse(json['finalizedAt']! as String),
+    reason: json['reason']! as String,
+    officialLog: ScorerLog.fromJson(
+      (json['officialLog']! as Map).cast<String, Object?>(),
+    ),
+    setMappings: {
+      for (final entry in ((json['setMappings'] as Map?) ?? const {}).entries)
+        entry.key as String: {
+          for (final mapping in (entry.value as Map).entries)
+            int.parse(mapping.key as String): (mapping.value as num).toInt(),
+        },
+    },
+    excludedRallyIds: {
+      for (final entry
+          in ((json['excludedRallyIds'] as Map?) ?? const {}).entries)
+        entry.key as String: (entry.value as List<Object?>).cast<String>(),
+    },
+    setTargets: {
+      for (final entry in ((json['setTargets'] as Map?) ?? const {}).entries)
+        int.parse(entry.key as String): (entry.value as num).toInt(),
+    },
+  );
 }
 
 class Game {
