@@ -1,12 +1,27 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vc_sets/application/file_exchange.dart';
 import 'package:vc_sets/domain/models.dart';
 import 'package:vc_sets/domain/packages.dart';
 
 import 'test_fixtures.dart';
+
+String withDescendingSetMapping(String source) {
+  final root = jsonDecode(source) as Map<String, dynamic>;
+  final payload = jsonEncode(root['payload']);
+  final mapping = RegExp(r'"[12]":[12],"[12]":[12]');
+  if (!mapping.hasMatch(payload)) {
+    throw StateError('Fixture needs a two-set correction.');
+  }
+  final windowsPayload = payload.replaceFirst(mapping, '"2":1,"1":2');
+  final manifest = Map<String, dynamic>.from(
+    root['manifest'] as Map,
+  )..['payloadSha256'] = sha256.convert(utf8.encode(windowsPayload)).toString();
+  return '{"manifest":${jsonEncode(manifest)},"payload":$windowsPayload}';
+}
 
 void main() {
   const service = PortablePackageService();
@@ -38,6 +53,175 @@ void main() {
     final root = jsonDecode(source) as Map<String, dynamic>;
     root['payload']['deviceId'] = 'tampered';
     expect(() => service.decodeBackup(jsonEncode(root)), throwsFormatException);
+  });
+
+  test('backup can skip the hash but not format and package checks', () {
+    final source = service.createBackup(
+      packageId: 'backup',
+      data: const AppData(deviceId: 'device-a'),
+      exportedAt: DateTime.utc(2026, 10, 2),
+    );
+    final root = jsonDecode(source) as Map<String, dynamic>;
+    root['payload']['deviceId'] = 'changed';
+    final changed = jsonEncode(root);
+
+    expect(() => service.decodeBackup(changed), throwsFormatException);
+    expect(
+      service.decodeBackup(changed, verifyIntegrity: false).deviceId,
+      'changed',
+    );
+    expect(
+      const FileExchangeService()
+          .decodeBackupBytes(
+            Uint8List.fromList(utf8.encode(changed)),
+            verifyIntegrity: false,
+          )
+          .deviceId,
+      'changed',
+    );
+    expect(
+      () => service.decodeBackup(
+        changed.substring(0, changed.length - 1),
+        verifyIntegrity: false,
+      ),
+      throwsFormatException,
+    );
+
+    root['manifest']['type'] = 'game';
+    expect(
+      () => service.decodeBackup(jsonEncode(root), verifyIntegrity: false),
+      throwsFormatException,
+    );
+    root['manifest']['type'] = 'backup';
+    root['manifest']['schemaVersion'] =
+        PortablePackageService.schemaVersion + 1;
+    expect(
+      () => service.decodeBackup(jsonEncode(root), verifyIntegrity: false),
+      throwsFormatException,
+    );
+  });
+
+  test('raw-order fallback validates an equivalent encoded payload', () {
+    final data = AppData(deviceId: 'device-a');
+    final source = service.createBackup(
+      packageId: 'escaped-backup',
+      data: data,
+      exportedAt: DateTime.utc(2026, 10, 2),
+    );
+    final escapedPayload = jsonEncode(data.toJson())
+        .replaceFirst('device-a', r'device\u002da');
+    final originalHash =
+        (jsonDecode(source) as Map)['manifest']['payloadSha256'] as String;
+    final escapedHash = sha256.convert(utf8.encode(escapedPayload)).toString();
+    final escapedSource = source
+        .replaceFirst('"deviceId": "device-a"', r'"deviceId": "device\u002da"')
+        .replaceFirst(originalHash, escapedHash);
+    final decodedHashSource = source.replaceFirst(
+      '"deviceId": "device-a"',
+      r'"deviceId": "device\u002da"',
+    );
+
+    expect(escapedHash, isNot(originalHash));
+    expect(service.decodeBackup(escapedSource).deviceId, 'device-a');
+    expect(service.decodeBackup(decodedHashSource).deviceId, 'device-a');
+    expect(
+      () => service.decodeBackup(
+        escapedSource.replaceFirst(
+          r'"deviceId": "device\u002da"',
+          '"deviceId": "changed"',
+        ),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('backup and game package retain descending set-mapping keys', () {
+    final official = testLog(id: 'official');
+    final game = testGame(logs: [testLog()], officialLog: official).copyWith(
+      revisions: [
+        FinalizationRevision(
+          id: 'revision',
+          finalizedAt: DateTime.utc(2026, 10, 2),
+          reason: 'Corrected set order',
+          officialLog: official,
+          setMappings: const {
+            'log-a': {2: 1, 1: 2},
+          },
+        ),
+      ],
+    );
+    final tournament = testTournament(games: [game]);
+    final data = AppData(deviceId: 'device-a', tournaments: [tournament]);
+    final backup = withDescendingSetMapping(
+      service.createBackup(
+        packageId: 'mapped-backup',
+        data: data,
+        exportedAt: DateTime.utc(2026, 10, 2),
+      ),
+    );
+    final package = service.createGamePackage(
+      packageId: 'mapped-game',
+      deviceId: 'device-a',
+      exportedAt: DateTime.utc(2026, 10, 2),
+      tournament: tournament,
+      game: game,
+      log: game.logs.first,
+    );
+
+    final gamePackage = withDescendingSetMapping(package.encode());
+    expect(backup, contains('"2":1,"1":2'));
+    expect(
+      service
+          .decodeBackup(backup)
+          .tournaments
+          .single
+          .games
+          .single
+          .revisions
+          .single
+          .setMappings['log-a'],
+      {2: 1, 1: 2},
+    );
+    expect(
+      service
+          .decodeGamePackage(gamePackage)
+          .tournament
+          .games
+          .single
+          .revisions
+          .single
+          .setMappings['log-a'],
+      {2: 1, 1: 2},
+    );
+    expect(
+      () => service.decodeBackup(
+        backup.replaceFirst('"deviceId":"device-a"', '"deviceId":"changed"'),
+      ),
+      throwsFormatException,
+    );
+    final alteredGamePackage = gamePackage.replaceFirst(
+      '"gameId":"game"',
+      '"gameId":"changed"',
+    );
+    expect(alteredGamePackage, isNot(gamePackage));
+    expect(
+      () => service.decodeGamePackage(alteredGamePackage),
+      throwsFormatException,
+    );
+    final rootEnd = backup.lastIndexOf('}');
+    final duplicatePayload =
+        '${backup.substring(0, rootEnd)}, "payload": ${jsonEncode(data.toJson())}}';
+    expect(() => service.decodeBackup(duplicatePayload), throwsFormatException);
+    final duplicateGamePayload =
+        '${gamePackage.substring(0, gamePackage.length - 1)},"payload":{}}';
+    expect(
+      () => service.decodeGamePackage(duplicateGamePayload),
+      throwsFormatException,
+    );
+    expect(
+      () => service.decodeBackup(backup.substring(0, backup.length - 1)),
+      throwsFormatException,
+    );
   });
 
   test('full backup round trips tournament data', () {

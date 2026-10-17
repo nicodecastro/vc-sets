@@ -6,6 +6,7 @@ import 'package:vc_sets/application/providers.dart';
 import 'package:vc_sets/data/repository.dart';
 import 'package:vc_sets/domain/models.dart';
 import 'package:vc_sets/presentation/app.dart';
+import 'package:vc_sets/presentation/pages/backup_page.dart';
 import 'package:vc_sets/presentation/pages/games_page.dart';
 import 'package:vc_sets/presentation/pages/reconcile_page.dart';
 import 'package:vc_sets/presentation/pages/reports_page.dart';
@@ -15,6 +16,25 @@ import 'package:vc_sets/presentation/pages/tracker_page.dart';
 import 'test_fixtures.dart';
 
 void main() {
+  testWidgets('backup page offers verified and unverified restore', (
+    tester,
+  ) async {
+    const data = AppData(deviceId: 'test-device');
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appRepositoryProvider.overrideWithValue(MemoryAppRepository(data)),
+          initialAppDataProvider.overrideWithValue(data),
+        ],
+        child: const MaterialApp(home: Scaffold(body: BackupPage())),
+      ),
+    );
+
+    expect(find.text('Preview & restore'), findsOneWidget);
+    expect(find.text('Skip integrity check (faster, unsafe)'), findsOneWidget);
+  });
+
   testWidgets('dashboard renders at phone and desktop widths', (tester) async {
     const data = AppData(deviceId: 'test-device');
     final repository = MemoryAppRepository(data);

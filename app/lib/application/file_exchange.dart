@@ -59,14 +59,17 @@ class FileExchangeService {
     );
   }
 
-  Future<AppData?> pickBackup() async {
+  Future<AppData?> pickBackup({bool verifyIntegrity = true}) async {
     final bytes = await _pickPortableFile('Restore VC SETS backup');
     if (bytes == null) return null;
-    return decodeBackupBytes(bytes);
+    return decodeBackupBytes(bytes, verifyIntegrity: verifyIntegrity);
   }
 
-  AppData decodeBackupBytes(Uint8List bytes) =>
-      const PortablePackageService().decodeBackup(_decodePortableText(bytes));
+  AppData decodeBackupBytes(Uint8List bytes, {bool verifyIntegrity = true}) =>
+      const PortablePackageService().decodeBackup(
+        _decodePortableText(bytes),
+        verifyIntegrity: verifyIntegrity,
+      );
 
   Future<void> exportStandingsCsv(Tournament tournament) async {
     final buffer = StringBuffer(

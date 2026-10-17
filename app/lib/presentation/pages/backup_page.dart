@@ -57,6 +57,12 @@ class BackupPage extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  TextButton.icon(
+                    onPressed: () =>
+                        _restore(context, ref, verifyIntegrity: false),
+                    icon: const Icon(Icons.warning_amber_rounded),
+                    label: const Text('Skip integrity check (faster, unsafe)'),
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'Backups are plain JSON and may contain player information. Keep exported files in an appropriately protected location.',
@@ -136,16 +142,23 @@ class BackupPage extends ConsumerWidget {
     }
   }
 
-  Future<void> _restore(BuildContext context, WidgetRef ref) async {
+  Future<void> _restore(
+    BuildContext context,
+    WidgetRef ref, {
+    bool verifyIntegrity = true,
+  }) async {
     try {
-      final backup = await const FileExchangeService().pickBackup();
+      final backup = await const FileExchangeService().pickBackup(
+        verifyIntegrity: verifyIntegrity,
+      );
       if (backup == null || !context.mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Restore this backup?'),
           content: Text(
-            'The package contains ${backup.tournaments.length} tournament(s). It will replace the current local dataset after confirmation.',
+            'The package contains ${backup.tournaments.length} tournament(s). It will replace the current local dataset after confirmation.'
+            '${verifyIntegrity ? '' : '\n\nIntegrity was not checked. A damaged or altered backup could replace your current data.'}',
           ),
           actions: [
             TextButton(
