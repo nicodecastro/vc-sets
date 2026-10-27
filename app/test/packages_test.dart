@@ -240,6 +240,108 @@ void main() {
     expect(restored.importedPackageIds, ['one']);
   });
 
+  test('R-5 CSV exports both teams, every sheet, and their substitutions', () {
+    final now = DateTime.utc(2026, 10, 2, 10);
+    final homeWithBench = homeTeam.copyWith(
+      players: [
+        ...homeTeam.players,
+        const Player(
+          id: 'bench',
+          number: 19,
+          name: 'Santos, Bea',
+          position: PlayerPosition.U,
+        ),
+      ],
+    );
+    final homeLineup = LineupSnapshot(
+      teamId: homeTeam.id,
+      playerIds: homeTeam.players.map((player) => player.id).toList(),
+      recordedAt: now,
+    );
+    final revisedLineup = LineupSnapshot(
+      teamId: homeTeam.id,
+      playerIds: [
+        homeTeam.players[1].id,
+        homeTeam.players[0].id,
+        ...homeTeam.players.skip(2).map((player) => player.id),
+      ],
+      recordedAt: now.add(const Duration(minutes: 1)),
+    );
+    final awayLineup = LineupSnapshot(
+      teamId: awayTeam.id,
+      playerIds: awayTeam.players.map((player) => player.id).toList(),
+      recordedAt: now,
+    );
+    final substitution = Substitution(
+      id: 'sub',
+      teamId: homeTeam.id,
+      setNumber: 1,
+      playerOutId: homeTeam.players.first.id,
+      playerInId: 'bench',
+      homeScore: 8,
+      awayScore: 6,
+      recordedAt: now.add(const Duration(minutes: 2)),
+    );
+    final homeLog = testLog(id: 'home-log').copyWith(
+      lineups: [homeLineup, revisedLineup],
+      substitutions: [substitution],
+    );
+    final awayLog = testLog(
+      id: 'away-log',
+      assignedTeamId: awayTeam.id,
+    ).copyWith(lineups: [awayLineup]);
+    final official = testLog(id: 'official', assignedTeamId: 'official')
+        .copyWith(
+          lineups: [homeLineup, revisedLineup, awayLineup],
+          substitutions: [substitution],
+        );
+    final finalized = testGame(logs: [homeLog, awayLog], officialLog: official);
+    final nextGame = Game(
+      id: 'next-game',
+      tournamentId: 'tournament',
+      homeTeamId: homeTeam.id,
+      awayTeamId: awayTeam.id,
+      scheduledAt: now.add(const Duration(days: 1)),
+      venue: 'Main Court',
+      status: GameStatus.inProgress,
+      logs: [
+        ScorerLog(
+          id: 'next-log',
+          gameId: 'next-game',
+          assignedTeamId: homeTeam.id,
+          deviceId: 'device-a',
+          createdAt: now,
+          updatedAt: now,
+          initialServingTeamId: homeTeam.id,
+          lineups: [
+            LineupSnapshot(
+              teamId: homeTeam.id,
+              setNumber: 2,
+              playerIds: homeLineup.playerIds,
+              recordedAt: now.add(const Duration(days: 1)),
+            ),
+          ],
+        ),
+      ],
+    );
+    final tournament = testTournament(games: [finalized, nextGame])
+        .copyWith(teams: [homeWithBench, awayTeam]);
+
+    final csv = const FileExchangeService().r5AndSubsCsv(tournament);
+    final lines = const LineSplitter().convert(csv);
+
+    expect(lines, hasLength(6));
+    expect(lines.first, contains('Rotation,I,II,III,IV,V,VI,Player out'));
+    expect(csv, contains('"game","2026-10-02T00:00:00.000Z"'));
+    expect(csv, contains('"Home Club",1,"R-5"'));
+    expect(csv, contains('"Away Club",1,"R-5"'));
+    expect(csv, contains('"#1 Home 1"'));
+    expect(csv, contains('"#7 Away 1"'));
+    expect(csv, contains('"#19 Santos, Bea",8,6,"Regular","No"'));
+    expect(csv, contains('"next-game"'));
+    expect(csv, contains('"Home Club",2,"R-5"'));
+  });
+
   test('backup preserves per-set targets and reconciliation exclusions', () {
     final official = testLog(id: 'official');
     final game = testGame(logs: [testLog()], officialLog: official).copyWith(

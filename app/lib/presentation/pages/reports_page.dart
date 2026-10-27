@@ -59,7 +59,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       children: [
         PageHeader(
           title: 'Reports',
-          subtitle: 'Only finalized, reconciled games are included.',
+          subtitle: 'Stats use finalized games; R-5 exports include all recorded games.',
           actions: [
             OutlinedButton.icon(
               onPressed: () => _export(
@@ -75,6 +75,14 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               ),
               icon: const Icon(Icons.download),
               label: const Text('Player stats CSV'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _export(
+                () =>
+                    const FileExchangeService().exportR5AndSubsCsv(tournament),
+              ),
+              icon: const Icon(Icons.download),
+              label: const Text('R-5 & subs CSV'),
             ),
             OutlinedButton.icon(
               onPressed: () => _export(

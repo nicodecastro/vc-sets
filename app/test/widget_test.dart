@@ -1237,6 +1237,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Player stats summary'), findsOneWidget);
+    expect(find.text('R-5 & subs CSV'), findsOneWidget);
     expect(find.text('Team'), findsWidgets);
     expect(find.text('Last name'), findsOneWidget);
     expect(find.text('S+'), findsOneWidget);

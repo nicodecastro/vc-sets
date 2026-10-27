@@ -118,6 +118,122 @@ class FileExchangeService {
     return buffer.toString();
   }
 
+  Future<void> exportR5AndSubsCsv(Tournament tournament) async {
+    await _save(
+      '${_safe(tournament.name)}-r5-subs.csv',
+      r5AndSubsCsv(tournament),
+      mime: 'text/csv',
+    );
+  }
+
+  String r5AndSubsCsv(Tournament tournament) {
+    final buffer = StringBuffer(
+      'Game ID,Scheduled (UTC),Home,Away,Team,Set,Entry,Recorded (UTC),Rotation,I,II,III,IV,V,VI,Player out,Player in,Home score,Away score,Sub type,Automatic\r\n',
+    );
+    void writeRow(List<Object?> values) => buffer.writeln(
+      values
+          .map((value) {
+            if (value == null) return '';
+            return value is String ? _csv(value) : '$value';
+          })
+          .join(','),
+    );
+
+    final games = [...tournament.games]
+      ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    for (final game in games) {
+      final home = tournament.team(game.homeTeamId);
+      final away = tournament.team(game.awayTeamId);
+      final logs =
+          game.status == GameStatus.finalized && game.officialLog != null
+          ? [game.officialLog!]
+          : game.logs;
+      for (final team in [home, away]) {
+        final players = {for (final player in team.players) player.id: player};
+        String playerLabel(String id) {
+          final player = players[id];
+          return player == null ? id : '#${player.number} ${player.name}';
+        }
+
+        final lineups =
+            [
+              for (final log in logs)
+                ...log.lineups.where((item) => item.teamId == team.id),
+            ]..sort((a, b) {
+              final set = a.setNumber.compareTo(b.setNumber);
+              return set != 0
+                  ? set
+                  : (a.recordedAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+                        .compareTo(
+                          b.recordedAt ??
+                              DateTime.fromMillisecondsSinceEpoch(0),
+                        );
+            });
+        final substitutions =
+            [
+              for (final log in logs)
+                ...log.substitutions.where((item) => item.teamId == team.id),
+            ]..sort((a, b) {
+              final set = a.setNumber.compareTo(b.setNumber);
+              return set != 0 ? set : a.recordedAt.compareTo(b.recordedAt);
+            });
+        final sets = {
+          ...lineups.map((item) => item.setNumber),
+          ...substitutions.map((item) => item.setNumber),
+        }.toList()..sort();
+        final gameColumns = <Object?>[
+          game.id,
+          game.scheduledAt.toUtc().toIso8601String(),
+          home.name,
+          away.name,
+          team.name,
+        ];
+        for (final set in sets) {
+          for (final lineup in lineups.where((item) => item.setNumber == set)) {
+            writeRow([
+              ...gameColumns,
+              set,
+              'R-5',
+              lineup.recordedAt?.toUtc().toIso8601String() ?? '',
+              lineup.rotation,
+              for (var position = 0; position < 6; position++)
+                position < lineup.playerIds.length
+                    ? playerLabel(lineup.playerIds[position])
+                    : '',
+              '',
+              '',
+              null,
+              null,
+              '',
+              '',
+            ]);
+          }
+          for (final substitution in substitutions.where(
+            (item) => item.setNumber == set,
+          )) {
+            writeRow([
+              ...gameColumns,
+              set,
+              'Sub',
+              substitution.recordedAt.toUtc().toIso8601String(),
+              null,
+              ...List.filled(6, ''),
+              playerLabel(substitution.playerOutId),
+              playerLabel(substitution.playerInId),
+              substitution.homeScore,
+              substitution.awayScore,
+              substitution.isLiberoReplacement
+                  ? 'Libero replacement'
+                  : 'Regular',
+              substitution.automaticAfterEventId == null ? 'No' : 'Yes',
+            ]);
+          }
+        }
+      }
+    }
+    return buffer.toString();
+  }
+
   Future<void> exportPrintableHtml(Tournament tournament) async {
     final pools = tournament.format == TournamentFormat.poolsThenKnockout
         ? List.generate(tournament.poolCount, (index) => index + 1)
