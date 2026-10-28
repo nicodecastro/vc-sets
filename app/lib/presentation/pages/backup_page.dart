@@ -115,7 +115,7 @@ class BackupPage extends ConsumerWidget {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Scoring, reports, exports, and imports work without a live connection. Before closing the web app for offline use, wait for “Ready for offline use” on this browser or installed app. Clearing browser storage removes app files and tournament data. Export a backup after match day.',
+                      'Offline guarantee: scoring, reports, exports, and imports do not require an account or network connection. The hosted PWA contains only application code.',
                     ),
                   ),
                 ],

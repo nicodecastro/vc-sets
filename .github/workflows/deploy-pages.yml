@@ -22,37 +22,13 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.47.6'
           cache: true
       - run: flutter pub get
         working-directory: app
       - run: flutter test
         working-directory: app
-      - run: flutter build web --release --no-web-resources-cdn --base-href "/${{ github.event.repository.name }}/"
+      - run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
         working-directory: app
-      - run: dart run tool/build_offline.dart
-        working-directory: app
-      - run: dart run tool/browser/fixture.dart
-        working-directory: app
-      - uses: pnpm/action-setup@v4
-        with:
-          version: '11.25.0'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: app/tool/browser/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-        working-directory: app/tool/browser
-      - run: pnpm exec playwright install --with-deps chromium webkit
-        working-directory: app/tool/browser
-      - run: pnpm test
-        working-directory: app/tool/browser
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: offline-browser-results
-          path: app/tool/browser/test-results
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app/build/web

@@ -4,8 +4,4 @@ app/build/
 app/.flutter-plugins*
 app/android/.gradle/
 app/windows/flutter/ephemeral/
-app/tool/browser/node_modules/
-app/tool/browser/test-results/
-app/tool/browser/fixture.vcbackup
-output/playwright/
 

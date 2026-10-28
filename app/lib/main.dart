@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'application/providers.dart';
-import 'application/offline_status.dart';
 import 'data/database.dart';
 import 'data/repository.dart';
 import 'presentation/app.dart';
@@ -12,7 +11,6 @@ Future<void> main() async {
   final database = await AppDatabase.open();
   final repository = DriftAppRepository(database);
   final initialData = await repository.load();
-  initializeOfflineStatus();
   runApp(
     ProviderScope(
       overrides: [

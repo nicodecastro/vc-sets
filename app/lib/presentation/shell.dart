@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import 'widgets/offline_readiness.dart';
-
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.location, required this.child});
   final String location;
@@ -42,12 +40,7 @@ class AppShell extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1400),
-            child: Column(
-              children: [
-                const OfflineReadiness(),
-                Expanded(child: child),
-              ],
-            ),
+            child: child,
           ),
         ),
       );
