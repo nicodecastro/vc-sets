@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 ThemeData buildTheme() {
   const seed = Color(0xFF006C67);
@@ -9,6 +10,7 @@ ThemeData buildTheme() {
   );
   return ThemeData(
     useMaterial3: true,
+    fontFamily: kIsWeb ? 'Roboto' : null,
     colorScheme: scheme,
     scaffoldBackgroundColor: const Color(0xFFF3F6F4),
     cardTheme: const CardThemeData(
