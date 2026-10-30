@@ -16,7 +16,7 @@ The app is built with Flutter for Windows, Android, and the web. Match data is s
 
 The repository includes Windows and Android Flutter targets and a web app with an installable PWA manifest. A GitHub Pages workflow builds and deploys the web version when configured for the repository.
 
-**Web app:** [VC SETS](https://nicodecastro.github.io/vc-stats/). Open it once while connected; your browser's install option may then be available, depending on the browser and device.
+**Web app:** [VC SETS](https://nicodecastro.github.io/vc-sets/). Open it once while connected; your browser's install option may then be available, depending on the browser and device.
 
 To run from source, install Flutter and use these commands from `app/`:
 
