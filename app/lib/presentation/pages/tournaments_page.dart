@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/providers.dart';
+import '../../domain/sample_tournament.dart';
 import '../widgets/common.dart';
 
 class TournamentsPage extends ConsumerWidget {
@@ -18,6 +19,18 @@ class TournamentsPage extends ConsumerWidget {
           title: 'Tournaments',
           subtitle: 'Tournament rosters are snapshots, so later events never rewrite history.',
           actions: [
+            OutlinedButton.icon(
+              onPressed: () =>
+                  tournaments.any((item) => item.id == sampleTournamentId)
+                  ? _refreshSample(context, ref)
+                  : _loadSample(context, ref),
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: Text(
+                tournaments.any((item) => item.id == sampleTournamentId)
+                    ? 'Refresh sample tournament'
+                    : 'Load sample tournament',
+              ),
+            ),
             FilledButton.icon(
               onPressed: () => _create(context, ref),
               icon: const Icon(Icons.add),
@@ -64,6 +77,46 @@ class TournamentsPage extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  Future<void> _loadSample(BuildContext context, WidgetRef ref) async {
+    try {
+      final id = await ref
+          .read(appControllerProvider.notifier)
+          .loadSampleTournament();
+      if (context.mounted) context.go('/tournaments/$id');
+    } catch (error) {
+      if (context.mounted) showError(context, error);
+    }
+  }
+
+  Future<void> _refreshSample(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Refresh sample tournament?'),
+        content: const Text(
+          'This replaces any changes you made to the fictional sample tournament. Your other tournaments stay as they are.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Refresh sample'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await ref.read(appControllerProvider.notifier).refreshSampleTournament();
+      if (context.mounted) context.go('/tournaments/$sampleTournamentId');
+    } catch (error) {
+      if (context.mounted) showError(context, error);
+    }
   }
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {

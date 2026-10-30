@@ -6,6 +6,7 @@ import '../domain/game_linking.dart';
 import '../domain/packages.dart';
 import '../domain/reconciliation.dart';
 import '../domain/scoring.dart';
+import '../domain/sample_tournament.dart';
 import '../domain/statistics.dart';
 import 'providers.dart';
 
@@ -38,6 +39,34 @@ class AppController extends Notifier<AppData> {
       state.copyWith(tournaments: [...state.tournaments, tournament]),
     );
     return tournament.id;
+  }
+
+  Future<String> loadSampleTournament() async {
+    if (state.tournaments.any((item) => item.id == sampleTournamentId)) {
+      return sampleTournamentId;
+    }
+    await _commit(
+      state.copyWith(
+        tournaments: [...state.tournaments, buildSampleTournament()],
+      ),
+    );
+    return sampleTournamentId;
+  }
+
+  Future<void> refreshSampleTournament() async {
+    if (!state.tournaments.any((item) => item.id == sampleTournamentId)) {
+      throw StateError('Sample tournament not found.');
+    }
+    await _commit(
+      state.copyWith(
+        tournaments: [
+          for (final tournament in state.tournaments)
+            tournament.id == sampleTournamentId
+                ? buildSampleTournament()
+                : tournament,
+        ],
+      ),
+    );
   }
 
   Future<void> updateTournamentDetails(

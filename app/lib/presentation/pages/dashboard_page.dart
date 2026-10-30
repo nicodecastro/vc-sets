@@ -103,10 +103,30 @@ class DashboardPage extends ConsumerWidget {
             icon: Icons.emoji_events_outlined,
             title: 'Create your first tournament',
             message: 'Add tournament rosters, generate fixtures, and begin scoring offline.',
-            action: FilledButton.icon(
-              onPressed: () => context.go('/tournaments'),
-              icon: const Icon(Icons.add),
-              label: const Text('New tournament'),
+            action: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: () => context.go('/tournaments'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('New tournament'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    try {
+                      final id = await ref
+                          .read(appControllerProvider.notifier)
+                          .loadSampleTournament();
+                      if (context.mounted) context.go('/tournaments/$id');
+                    } catch (error) {
+                      if (context.mounted) showError(context, error);
+                    }
+                  },
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  label: const Text('Load sample tournament'),
+                ),
+              ],
             ),
           )
         else
