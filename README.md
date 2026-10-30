@@ -4,6 +4,10 @@ VC SETS (Statistics & Event Tracking System) helps the UPLB Volleyball Club run 
 
 The app is built with Flutter for Windows, Android, and the web. Match data is stored on each device, so scoring does not depend on a live connection between the scorers.
 
+## Screenshots
+
+![VC SETS rally scoring on a laptop](screenshots/rally-scoring-laptop.png)
+
 ## What it does
 
 - Set up tournaments, teams, rosters, and match rules. Generate round-robin fixtures, pool play followed by a knockout bracket, or a knockout-only bracket. Optional third-place matches are supported.
