@@ -40,11 +40,19 @@ For the web version, run `flutter run -d chrome`. For Android, connect a device 
 5. Export the second scorer's completed `.vcgame` package and import it on the tournament device.
 6. Compare the logs, resolve highlighted differences, and finalize the official match. Export a backup after match day.
 
-## How it works
+## Architecture and design decisions
 
-Flutter provides the Windows, Android, and web interfaces. Drift stores app data in a local SQLite file on native platforms and a browser SQLite database through WebAssembly on the web. The web build includes the SQLite WebAssembly file and Drift worker, so it does not fetch them from a runtime CDN.
+![First stat tracker iteration on a laptop](screenshots/v0-stat-tracker.png)
 
-Devices exchange `.vcgame` files instead of syncing through a server. Each package is JSON with a versioned manifest and a SHA-256 payload hash for integrity checking. The app records imported package IDs to prevent duplicate imports. During reconciliation, it compares rally winners and scores from both devices, lets the organizer choose corrections, and merges the player actions into an official log. Standings and player totals use finalized matches.
+The first stat tracker iteration ran on Google Sheets and Google Apps Script directly integrated with the spreadsheets that computes for top performers and individual awards. However, this approach required a stable internet connection during matches. VC SETS was built to be offline-first. Each device keeps its data locally and initial syncing is performed using custom backup files. Reconciliation for games is performed manually on a device by exporting the `.vcgame` files. Integration with the existing sheets was done by allowing exporting the player statistics as CSV which can then be copied and pasted for the computation of top performers and individual awards.
+
+- **Offline-first architecture:** VC SETS stores data on each device so scorers can record a match without a live connection. The web build includes its SQLite WebAssembly file and Drift worker locally.
+- **Cross-platform use:** Flutter provides one application for different devices through an installable PWA. Drift uses a native SQLite file on Windows and Android and SQLite through WebAssembly in the browser.
+- **Independent scoring and reconciliation:** Two scorers keep separate rally logs and record actions for their assigned teams. An organizer imports both logs, resolves missing rallies or conflicting scores and winners, and finalizes an official record. The app validates the result against the match rules and retains both scorer logs.
+- **Portable file exchange:** Scorers transfer .vcgame files between devices instead of syncing through a server. Packages and backups use versioned JSON with a SHA-256 integrity hash. The app tracks imported package IDs to prevent duplicate imports.
+- **CSV export for existing award calculations:** The player statistics export follows the format needed by the existing Google Sheets report, which contains the formulas for top performers and individual awards. Keeping those calculations in the sheet reduced the risk of reimplementing them under a short deadline and lets other tournaments use their own award rules.
+- **Reports derived from finalized matches:** Standings and player totals are calculated from official match records, avoiding a second set of editable totals.
+- **Responsive layout for tournament devices:** The interface was designed around the laptops, iPads, and tablets intended for the app’s first live deployment. Wider screens use a navigation rail and more space for match details; narrower screens use bottom navigation and compact layouts.
 
 ## Development
 
