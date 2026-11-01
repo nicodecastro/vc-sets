@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vc_sets/application/providers.dart';
 import 'package:vc_sets/data/repository.dart';
 import 'package:vc_sets/domain/models.dart';
+import 'package:vc_sets/domain/reconciliation.dart';
 import 'package:vc_sets/domain/sample_tournament.dart';
 import 'package:vc_sets/domain/scoring.dart';
 import 'package:vc_sets/domain/statistics.dart';
@@ -48,7 +49,13 @@ void main() {
       );
       expect(
         tournament.games.where((g) => g.status == GameStatus.scheduled),
-        hasLength(3),
+        hasLength(1),
+      );
+      expect(
+        tournament.games.where(
+          (g) => g.status == GameStatus.awaitingReconciliation,
+        ),
+        hasLength(2),
       );
       for (final game in tournament.games) {
         final rules = tournament.rulesFor(game);
@@ -114,9 +121,82 @@ void main() {
             ),
             isNotEmpty,
           );
-        } else {
+        } else if (game.status == GameStatus.scheduled) {
           expect(game.logs, isEmpty);
+        } else {
+          expect(game.logs, hasLength(2));
+          expect(game.officialLog, isNull);
+          expect(game.revisions, isEmpty);
+          for (final log in game.logs) {
+            expect(
+              log.rallies
+                  .expand((r) => r.actions)
+                  .every((action) => action.teamId == log.assignedTeamId),
+              isTrue,
+            );
+          }
         }
+      }
+      const reconciliation = ReconciliationService();
+      final practice = tournament.games[3];
+      expect(tournament.team(practice.homeTeamId).name, 'Summit Six');
+      expect(tournament.team(practice.awayTeamId).name, 'Metro Aces');
+      final comparison = reconciliation.compare(
+        practice.logs[0],
+        practice.logs[1],
+      );
+      expect(comparison.conflicts, hasLength(6));
+      for (final kind in [
+        ConflictKind.missingRally,
+        ConflictKind.winner,
+        ConflictKind.score,
+      ]) {
+        expect(
+          comparison.conflicts.where((conflict) => conflict.kind == kind),
+          hasLength(2),
+        );
+      }
+      final clean = tournament.games[4];
+      expect(tournament.team(clean.homeTeamId).name, 'Harbor Spikers');
+      expect(tournament.team(clean.awayTeamId).name, 'Metro Aces');
+      expect(
+        reconciliation.compare(clean.logs[0], clean.logs[1]).conflicts,
+        isEmpty,
+      );
+      // Each of the three finalized matches contributes two team appearances.
+      expect(
+        const StatisticsService()
+            .standings(tournament)
+            .fold<int>(0, (total, row) => total + row.played),
+        6,
+      );
+      for (final game in [practice, clean]) {
+        await controller.finalizeReconciliation(
+          tournament.id,
+          game.id,
+          preferImported: {},
+          reason: 'Use the correct first scorer log',
+        );
+        final persisted = AppData.decode((await repository.load()).encode());
+        final finalized = persisted.tournaments.last.games.firstWhere(
+          (item) => item.id == game.id,
+        );
+        expect(finalized.status, GameStatus.finalized);
+        expect(finalized.revisions, hasLength(1));
+        final official = finalized.officialLog!;
+        final rules = tournament.rulesFor(game);
+        expect(
+          const ScoringEngine().scoreProgressionReason(finalized, official),
+          isNull,
+        );
+        expect(
+          const ScoringEngine().excessRallyReason(official, rules),
+          isNull,
+        );
+        expect(
+          const ScoringEngine().score(finalized, official, rules).isComplete,
+          isTrue,
+        );
       }
       expect(
         const StatisticsService()
@@ -128,6 +208,15 @@ void main() {
       final refreshed = await repository.load();
       expect(refreshed.tournaments, hasLength(2));
       expect(refreshed.tournaments.first.id, existing.id);
+      expect(refreshed.tournaments.first.toJson(), existing.toJson());
+      final refreshedSample = refreshed.tournaments.last;
+      expect(refreshedSample.toJson(), buildSampleTournament().toJson());
+      expect(
+        refreshedSample.games.where(
+          (game) => game.status == GameStatus.awaitingReconciliation,
+        ),
+        hasLength(2),
+      );
       expect(
         refreshed.tournaments.last.games.first.officialLog!.rallies
             .expand((rally) => rally.actions)

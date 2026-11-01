@@ -93,7 +93,7 @@ Game _sampleGame(
     poolNumber: 1,
     rulesSnapshot: rules,
   );
-  if (index >= 3) return game;
+  if (index >= 5) return game;
 
   final setScores = switch (index) {
     0 => [(25, 19), (22, 25), (15, 12)],
@@ -276,22 +276,45 @@ Game _sampleGame(
         lineups: lineups,
         rallies: [
           for (final rally in official.rallies)
-            Rally(
-              id: rally.id,
-              setNumber: rally.setNumber,
-              sequence: rally.sequence,
-              winnerTeamId: rally.winnerTeamId,
-              homeScore: rally.homeScore,
-              awayScore: rally.awayScore,
-              homeRotation: rally.homeRotation,
-              awayRotation: rally.awayRotation,
-              servingTeamId: rally.servingTeamId,
-              recordedAt: rally.recordedAt,
-              actions: rally.actions.where((a) => a.teamId == team.id).toList(),
-            ),
+            // Keep alignment keys intact so each omitted rally is one conflict.
+            if (!(index == 3 &&
+                team.id == away.id &&
+                rally.setNumber == 1 &&
+                const [5, 10].contains(rally.sequence)))
+              Rally(
+                id: rally.id,
+                setNumber: rally.setNumber,
+                sequence: rally.sequence,
+                winnerTeamId:
+                    index == 3 &&
+                        team.id == away.id &&
+                        rally.setNumber == 1 &&
+                        const [15, 20].contains(rally.sequence)
+                    ? (rally.winnerTeamId == home.id ? away.id : home.id)
+                    : rally.winnerTeamId,
+                homeScore:
+                    rally.homeScore +
+                    (index == 3 &&
+                            team.id == away.id &&
+                            rally.setNumber == 1 &&
+                            const [25, 30].contains(rally.sequence)
+                        ? 1
+                        : 0),
+                awayScore: rally.awayScore,
+                homeRotation: rally.homeRotation,
+                awayRotation: rally.awayRotation,
+                servingTeamId: rally.servingTeamId,
+                recordedAt: rally.recordedAt,
+                actions: rally.actions
+                    .where((a) => a.teamId == team.id)
+                    .toList(),
+              ),
         ],
       ),
   ];
+  if (index >= 3) {
+    return game.copyWith(status: GameStatus.awaitingReconciliation, logs: logs);
+  }
   game = game.copyWith(
     status: GameStatus.finalized,
     logs: logs,
