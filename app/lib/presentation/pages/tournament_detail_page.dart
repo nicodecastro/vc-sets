@@ -174,13 +174,16 @@ class TournamentDetailPage extends ConsumerWidget {
                                 ),
                                 icon: const Icon(Icons.compare_arrows),
                               ),
-                            IconButton(
-                              tooltip: 'Track match',
-                              onPressed: () => context.push(
-                                '/tournaments/$tournamentId/games/${game.id}/track',
+                            if (game.status != GameStatus.finalized &&
+                                game.status !=
+                                    GameStatus.awaitingReconciliation)
+                              IconButton(
+                                tooltip: 'Track match',
+                                onPressed: () => context.push(
+                                  '/tournaments/$tournamentId/games/${game.id}/track',
+                                ),
+                                icon: const Icon(Icons.sports_volleyball),
                               ),
-                              icon: const Icon(Icons.sports_volleyball),
-                            ),
                             PopupMenuButton<String>(
                               tooltip: 'Game actions',
                               onSelected: (value) async {
