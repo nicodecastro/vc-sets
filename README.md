@@ -4,6 +4,8 @@ VC SETS (Statistics & Event Tracking System) helps the UPLB Volleyball Club run 
 
 The app is built with Flutter for Windows, Android, and the web. Match data is stored on each device, so scoring does not depend on a live connection between the scorers.
 
+**Case study:** [Why I built VC SETS, the engineering decisions, and lessons](https://nicodecastro.dev/projects/vc-sets).
+
 ## Screenshots
 
 ![VC SETS rally scoring on a laptop](screenshots/rally-scoring-laptop.png)
